@@ -14,7 +14,16 @@ Python>=3.10；清洗端无pip依赖。FFmpeg/ffprobe须可用并带blurdetect�
 bash scripts/sync_pull_ff_only.sh
 ```
 
-## 2. 创建四份仓库外配置
+## 2. 创建统一配置（推荐）
+
+**当前推荐：只创建一份统一配置**，不再手工维护四份。模板为`configs/pipeline.example.json`，参见[统一配置字段与命令](configuration.md)：
+
+```bash
+bash run.sh pipeline init-config /mnt/sfs/ltj/image-video.local.json
+bash run.sh pipeline show --config /mnt/sfs/ltj/image-video.local.json
+```
+
+先编辑source/media_root/work_root、API/model_revision及本地权重/工具位置，再执行show。随后用`bash run.sh pipeline stage01|stage02|stage03 --config ... --phase pilot|run`；服务用`pipeline vllm --phase print|serve`。下面四份配置的操作是兼容旧入口，使用统一配置时不用执行。
 
 ```bash
 bash run.sh stage01 init-config /mnt/sfs/ltj/iv-stage01.local.json

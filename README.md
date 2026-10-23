@@ -48,6 +48,16 @@
 
 建议服务器代码目录 `/mnt/sfs/ltj/project/image-video-cleaner`，外部数据/缓存目录 `/mnt/sfs/ltj/media_cleaning/<任务名>/`。这些是**建议路径，尚未部署**。完整配置和执行顺序见[操作手册](docs/runbook.md)。
 
+**推荐只维护一份统一配置**：[configs/pipeline.example.json](configs/pipeline.example.json)。原始JSONL/媒体根、各阶段输出、帧缓存、模型API、权重目录和vLLM环境Python都在其中；阶段输入和服务端口/模型名自动衔接。
+
+```bash
+bash run.sh pipeline init-config /mnt/sfs/ltj/image-video.local.json
+bash run.sh pipeline show --config /mnt/sfs/ltj/image-video.local.json
+bash run.sh pipeline stage01 --config /mnt/sfs/ltj/image-video.local.json --phase pilot --rows 100
+```
+
+创建后先用编辑器填写路径再show。完整字段说明及其余阶段命令见[统一配置手册](docs/configuration.md)。以下分阶段配置入口保留兼容，使用统一配置时无需另建四份文件。
+
 ```bash
 bash run.sh stage01 init-config /mnt/sfs/ltj/iv-stage01.local.json
 bash run.sh stage02 init-config /mnt/sfs/ltj/iv-stage02.local.json

@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "paths": {
+    "source": null,
+    "media_root": null,
+    "allowed_media_roots": [],
+    "work_root": null,
+    "stage01_output": null,
+    "stage02_output": null,
+    "stage03_output": null,
+    "frame_cache_root": null,
+    "vllm_runtime_root": null,
+    "scratch_root": null
+  },
+  "tools": {
+    "python": null,
+    "vllm_python": null,
+    "ffmpeg": "ffmpeg",
+    "ffprobe": "ffprobe"
+  },
+  "api": {
+    "api_base": "http://127.0.0.1:8018/v1",
+    "model": "Qwen3.8-27B",
+    "model_revision": null
+  },
+  "stage01": {
+    "workers": 4,
+    "part_rows": 128,
+    "timeout_seconds": 30,
+    "scratch_limit_mb": 8192,
+    "clarity": {
+      "image_threshold": null,
+      "video_threshold": null,
+      "action": "review"
+    },
+    "text": {
+      "ngram": 4,
+      "min_tokens": 32,
+      "threshold": 0.6,
+      "action": "review"
+    },
+    "exact_duplicate": true
+  },
+  "stage02": {
+    "workers": 64,
+    "part_rows": 128,
+    "scratch_limit_mb": 8192,
+    "timeout_seconds": 120,
+    "max_input_chars": 24000,
+    "minimum_score": null
+  },
+  "stage03": {
+    "cache_namespace": "image-video",
+    "frame_cache_mode": "read_write",
+    "vision_processor_kwargs": {
+      "max_pixels": 262144
+    },
+    "frame_cache_limit_mb": 65536,
+    "frames_per_video": 8,
+    "max_images_per_request": 32,
+    "max_frame_pixels": 8388608,
+    "max_frame_bytes": 83886080,
+    "max_request_image_bytes": 33554432,
+    "workers": 8,
+    "part_rows": 32,
+    "timeout_seconds": 120,
+    "max_input_chars": 24000,
+    "scratch_limit_mb": 8192,
+    "minimum_score": null
+  },
+  "vllm": {
+    "model_path": null,
+    "tensor_parallel_size": 2,
+    "data_parallel_size": 8,
+    "api_server_count": 4,
+    "max_model_len": 32768,
+    "max_num_batched_tokens": 32768,
+    "max_num_seqs": 8,
+    "gpu_memory_utilization": 0.9,
+    "mm_processor_cache_gb": 1,
+    "prefix_caching": true,
+    "async_scheduling": true,
+    "decode_graph": true
+  }
+}

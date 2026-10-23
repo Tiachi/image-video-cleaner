@@ -11,8 +11,9 @@ if [[ $# -gt 0 ]]; then shift; fi
 case "$command" in
   stage01|stage02|stage03) bash "$root/scripts/run_${command}.sh" "$@" ;;
   vllm) PYTHONDONTWRITEBYTECODE=1 "${OPD_PYTHON:-python3}" -B -u "$root/scripts/vllm_service.py" "$@" ;;
+  pipeline) PYTHONDONTWRITEBYTECODE=1 "${OPD_PYTHON:-python3}" -B -u "$root/scripts/pipeline_config.py" "$@" ;;
   test) PYTHONDONTWRITEBYTECODE=1 "${OPD_PYTHON:-python3}" -B -m unittest discover -s "$root/tests" -v ;;
-  help) echo 'bash run.sh stage01|stage02|stage03 init-config|pilot|run ... ; stage03 cache ; vllm print|serve --config ... ; test' ;;
+  help) echo 'Unified: bash run.sh pipeline init-config|show|stage01|stage02|stage03|vllm ... ; legacy: stage01|stage02|stage03|vllm ; test' ;;
   *) echo '[image-video-cleaner] FAIL unknown command' >&2; exit 2 ;;
 esac
 echo '[image-video-cleaner] PASS requested command'
