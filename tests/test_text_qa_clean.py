@@ -1,0 +1,187 @@
+from copy import deepcopy
+import hashlib
+import json
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'scripts'))
+import text_qa_clean as s
+from text_contract import parse, issues_for
+core = s.core
+
+
+class ContractTests(unittest.TestCase):
+    def test_all_three_cot_classes(self):
+        for value in (0, 1, 2):
+            self.assertEqual(parse('8,1,0,0,%d,2' % value)['cot_class'], value)
+
+    def test_unknown_is_not_fourth_cot_class(self):
+        label = parse('8,1,0,0,9,0')
+        self.assertIsNone(label['cot_class'])
+        self.assertEqual(core.decision(issues_for(label, None)), 'review')
+
+    def test_quality_score_limits_and_format(self):
+        for value in ('0,1,0,0,1,2', '11,1,0,0,1,2', '8,1,0,0,3,2',
+                      '8,1,0,0,1,5', '8,1,0,0,1', '8,1,0,0,1,2 explanation',
+                      '{"score":8}', '8,1,0,0,1,2,3'):
+            with self.assertRaises(ValueError):
+                parse(value)
+        self.assertEqual(parse(' 8, 1, 0, 0, 1, 2 ')['quality_score'], 8)
+
+    def test_reasonable_refusal_not_auto_rejected(self):
+        self.assertEqual(issues_for(parse('9,1,2,0,1,1'), 8), [])
+
+    def test_invalid_refusal_and_obvious_error_reject(self):
+        self.assertEqual(core.decision(issues_for(parse('3,0,1,0,1,1'), None)), 'rejected')
+        self.assertEqual(core.decision(issues_for(parse('3,1,0,1,2,1'), None)), 'rejected')
+
+    def test_contradictory_high_score_reviews(self):
+        result = issues_for(parse('9,1,0,1,2,1'), 8)
+        self.assertEqual(result, [{'reason': 'model_label_contradiction', 'action': 'review'}])
+
+    def test_quality_threshold_is_explicit(self):
+        label = parse('6,1,0,0,1,2')
+        self.assertEqual(issues_for(label, None), [])
+        self.assertEqual(core.decision(issues_for(label, 7)), 'rejected')
+
+    def test_non_loopback_api_refused(self):
+        for value in ('https://api.example.test/v1', 'http://192.168.1.2/v1',
+                      'http://user:secret@localhost/v1', 'http://localhost/v1?secret=123'):
+            with self.assertRaises(ValueError):
+                s.api_location(value)
+
+
+class FakeMedia:
+    def __init__(self, *args): pass
+    def inspect(self, refs): return [dict(x, status='ok') for x in refs]
+    def close(self): pass
+
+
+class FakeJudge(s.Judge):
+    payloads = []
+    def request(self, payload):
+        value = json.loads(payload); self.payloads.append(value)
+        if value['answer'] == 'bad answer': return '3,0,0,0,1,2', {'prompt_tokens': 10, 'completion_tokens': 11}
+        if value['answer'] == 'protocol error': return 'bad response', {}
+        if value['answer'] == 'suitable': return '8,1,0,0,2,1', {'prompt_tokens': 10, 'completion_tokens': 11}
+        if value['answer'] == 'has reasoning': return '9,1,0,0,0,1', {}
+        return '8,1,0,0,1,2', {'prompt_tokens': 10, 'completion_tokens': 11}
+
+
+def row(answer='Red.', ident='one', extra=False):
+    r = {'id': ident, 'images': [ident+'.png'], 'secret_metadata_not_for_model': '/private/media/path',
+         'conversations': [{'from': 'human', 'value': '<image>\nWhat color?'}, {'from': 'gpt', 'value': answer}]}
+    if extra:
+        r['conversations'] += [{'from': 'human', 'value': 'And why?'}, {'from': 'gpt', 'value': 'suitable'}]
+    return r
+
+
+class PipelineTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(); self.base = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+        self.src = self.base/'original.jsonl'; self.parent = self.base/'stage01/full'
+        self.c1 = deepcopy(core.DEFAULT)
+        self.c1.update(source=str(self.src), media_root=str(self.base/'media'),
+                       allowed_media_roots=[str(self.base/'media')], output=str(self.base/'stage01'),
+                       workers=1, part_rows=2, scratch_limit_mb=16)
+        self.c = deepcopy(s.DEFAULT)
+        self.c.update(stage1_delivery=str(self.parent/'delivery'), output=str(self.base/'stage02'),
+                      model='synthetic', model_revision='synthetic-v1', workers=2, part_rows=2, scratch_limit_mb=16)
+        FakeJudge.payloads = []
+
+    def prepare(self, rows):
+        self.src.write_bytes(b''.join(core.encoded(x) for x in rows))
+        core.run(self.c1, self.parent, {'test': True}, inspector_class=FakeMedia,
+                 code_identity={'synthetic': 'stage01'})
+        p = self.base/'stage02-config.json'; p.write_bytes(core.encoded(self.c))
+        with patch.object(core, 'REPO', self.base/'fake-code-root'):
+            return s.config(p)
+
+    def run_stage2(self, c, limit=None):
+        return core.run(c, self.base/'stage02/full', {'synthetic': True}, limit, FakeJudge,
+                        {'synthetic': 'stage02'}, s.analyse, s.summary_builder(c), s.emit, s.write_attributes,
+                        allow_empty=True)
+
+    def test_two_stage_lineage_outputs_and_no_metadata_in_model_payload(self):
+        original = [row('Red.', 'a'), row('bad answer', 'b'), row('suitable', 'c')]
+        c = self.prepare(original); result = self.run_stage2(c)
+        self.assertEqual(result['counts'], {'accepted': 2, 'rejected': 1})
+        self.assertEqual(result['qa_distributions']['cot_class'], {'0': 0, '1': 2, '2': 1, 'unknown': 0})
+        self.assertEqual(result['accepted_qa_distributions']['cot_class'], {'0': 0, '1': 1, '2': 1, 'unknown': 0})
+        self.assertEqual(result['model_calls'], 3)
+        self.assertEqual(result['media_reads'], 0)
+        self.assertEqual(result['cot_generated'], 0)
+        values = [json.loads(x) for x in (self.base/'stage02/full/delivery/attributes.jsonl').read_bytes().splitlines()]
+        self.assertEqual([x['original_source_row'] for x in values], [0, 1, 2])
+        self.assertEqual([x['cot_candidate'] for x in values], [False, False, True])
+        self.assertNotIn('private/media', json.dumps(FakeJudge.payloads))
+        self.assertEqual((self.base/'stage02/full/delivery/accepted.jsonl').read_bytes(),
+                         core.encoded(original[0])+core.encoded(original[2]))
+        core.check_part(self.base/'stage02/full/delivery')
+
+    def test_empty_stage1_rejection_is_not_resurrected(self):
+        missing = row('anything', 'bad'); missing['conversations'][0]['value'] = '<image> '
+        c = self.prepare([missing, row('Red.', 'good')]); result = self.run_stage2(c)
+        self.assertEqual(result['rows'], 1)
+        a = json.loads((self.base/'stage02/full/delivery/audit.jsonl').read_bytes())
+        self.assertEqual(a['source_row'], 0); self.assertEqual(a['original_source_row'], 1)
+
+    def test_context_and_multi_qa_statistics(self):
+        c = self.prepare([row('Red.', 'multi', extra=True)])
+        result = self.run_stage2(c)
+        self.assertEqual(result['rows'], 1); self.assertEqual(result['qa_counts']['accepted'], 2)
+        self.assertEqual(FakeJudge.payloads[1]['previous_qa'][0]['answer'], 'Red.')
+
+    def test_explicit_existing_cot_fields_are_text_only_and_aligned(self):
+        attached, issues = s.cot_fields({'cot':['first reasoning', None]}, 0, 2)
+        self.assertEqual(attached, {'cot':'first reasoning'}); self.assertEqual(issues, [])
+        attached, issues = s.cot_fields({'cot':'unmapped row reasoning'}, 0, 2)
+        self.assertEqual(attached, {}); self.assertEqual(issues[0]['reason'], 'ambiguous_cot_attachment')
+        attached, issues = s.cot_fields({'cot':{'unknown':'structure'}}, 0, 1)
+        self.assertEqual(issues[0]['reason'], 'unsupported_cot_field')
+
+    def test_protocol_failure_stays_review_without_retry(self):
+        c = self.prepare([row('protocol error')]); result = self.run_stage2(c)
+        self.assertEqual(result['counts'], {'review': 1})
+        self.assertEqual(result['model_status_counts'], {'model_error': 1})
+        self.assertEqual(len(FakeJudge.payloads), 1)
+
+    def test_input_limit_does_not_truncate_and_send(self):
+        c = self.prepare([row(' '.join('word%d' % x for x in range(100)))]); c['max_input_chars'] = 100
+        result = self.run_stage2(c)
+        self.assertEqual(result['reason_counts'], {'input_too_long': 1})
+        self.assertEqual(result['model_calls'], 0); self.assertEqual(FakeJudge.payloads, [])
+
+    def test_empty_upstream_has_zero_stats_without_model_calls(self):
+        r = row(); r['conversations'][1]['value'] = ''
+        c = self.prepare([r]); result = self.run_stage2(c)
+        self.assertEqual(result['status'], 'EMPTY_UPSTREAM')
+        self.assertEqual(result['rows'], 0); self.assertEqual(FakeJudge.payloads, [])
+
+    def test_stage1_row_tamper_fails_before_model(self):
+        c = self.prepare([row()]); path = Path(c['source']); before = path.read_bytes()
+        path.write_bytes(before.replace(b'Red.', b'Blue'))
+        with self.assertRaisesRegex(ValueError, 'lineage mismatch'):
+            self.run_stage2(c)
+        self.assertEqual(FakeJudge.payloads, [])
+
+    def test_parent_audit_tamper_refused(self):
+        c = self.prepare([row()]); (self.parent/'delivery/audit.jsonl').write_bytes(b'')
+        with self.assertRaisesRegex(ValueError, 'audit SHA'):
+            self.run_stage2(c)
+
+    def test_resume_does_not_repeat_completed_local_model_calls(self):
+        c = self.prepare([row('Red.', 'a'), row('has reasoning', 'b')])
+        with patch.object(core, 'publish', side_effect=RuntimeError('synthetic export crash')):
+            with self.assertRaises(RuntimeError): self.run_stage2(c)
+        self.assertEqual(len(FakeJudge.payloads), 2)
+        self.run_stage2(c)
+        self.assertEqual(len(FakeJudge.payloads), 2)
+
+
+if __name__ == '__main__':
+    unittest.main()

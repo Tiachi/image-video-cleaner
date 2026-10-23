@@ -1,0 +1,20 @@
+{
+  "model_path": null,
+  "model_revision": null,
+  "runtime_root": null,
+  "served_model_name": "Qwen3.8-27B",
+  "port": 8018,
+  "tensor_parallel_size": 2,
+  "data_parallel_size": 8,
+  "api_server_count": 4,
+  "max_model_len": 32768,
+  "max_num_batched_tokens": 32768,
+  "max_num_seqs": 8,
+  "gpu_memory_utilization": 0.9,
+  "max_images_per_prompt": 32,
+  "vision_max_pixels": 262144,
+  "mm_processor_cache_gb": 1,
+  "prefix_caching": true,
+  "async_scheduling": true,
+  "decode_graph": true
+}

@@ -1,0 +1,4 @@
+# Cleaning, HTTP client, frame caching and tests use Python's standard library.
+# Python >=3.10 and external FFmpeg/ffprobe with blurdetect are required.
+# Run Qwen3.8-27B using an existing compatible vLLM/vLLM-Ascend environment.
+# Model weights and inference dependencies are intentionally not installed here.

@@ -1,0 +1,14 @@
+{
+  "stage1_delivery": null,
+  "output": null,
+  "api_base": "http://127.0.0.1:8018/v1",
+  "model": "Qwen3.8-27B",
+  "model_revision": null,
+  "workers": 64,
+  "part_rows": 128,
+  "scratch_root": null,
+  "scratch_limit_mb": 8192,
+  "timeout_seconds": 120,
+  "max_input_chars": 24000,
+  "minimum_score": null
+}

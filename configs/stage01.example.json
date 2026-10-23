@@ -1,0 +1,25 @@
+{
+  "source": null,
+  "media_root": null,
+  "allowed_media_roots": [],
+  "output": null,
+  "workers": 4,
+  "part_rows": 128,
+  "timeout_seconds": 30,
+  "scratch_root": null,
+  "scratch_limit_mb": 8192,
+  "ffmpeg": "ffmpeg",
+  "ffprobe": "ffprobe",
+  "clarity": {
+    "image_threshold": null,
+    "video_threshold": null,
+    "action": "review"
+  },
+  "text": {
+    "ngram": 4,
+    "min_tokens": 32,
+    "threshold": 0.6,
+    "action": "review"
+  },
+  "exact_duplicate": true
+}
