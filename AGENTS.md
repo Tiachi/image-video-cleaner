@@ -1,5 +1,7 @@
 # Image/video cleaning project rules
 
+- New agents: read [docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md) for requirements, architecture, contracts, code map, verified limits and pending deployment work. These working rules and the user's latest instructions remain authoritative.
+
 - This standalone project handles images and video visuals only. Do not add sound processing, source separation, transcription, or acoustic task labels without a new user request. Extra original fields remain untouched and are not media inputs.
 - Preserve original annotations/media. Route original JSONL row bytes to stage outputs; derived labels go in audit/attribute sidecars.
 - Every stage keeps accepted, rejected, review, audit, summary/report, identity and checksum receipts. Success means stage execution, not human-verified label accuracy or a formal training-format certificate.

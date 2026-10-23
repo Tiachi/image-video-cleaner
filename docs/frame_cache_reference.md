@@ -32,7 +32,7 @@ Stage01缓存的是blur**数值**，没有保存帧图；不能说Stage03直接�
 
 ## 3. 抽帧与实际时间
 
-默认每个视频切片8帧，取`start+(end-start)*(i+0.5)/8`。缺start用0，缺end用视频流时长；不能用较长容器音轨延长画面区间。显式越界切片、重复PTS、解码帧落到区间外或不足规定帧数都不伪造成功。
+默认每个视频切片8帧，取`start+(end-start)*(i+0.5)/8`。缺start用0，缺end优先用视频流时长。当前`ffmpeg_tools.probe`在视频流duration缺失/N/A时会回退format.duration，因此“较长容器音轨不会扩展画面区间”尚非完全保证：容器回退可能受音轨时长影响。真实pilot须覆盖此分支，后续可评估拒绝不确定视频时长或获取可靠流时间，不将回退值宣称为已核实的视频有效时长。显式越界切片、重复PTS、解码帧落到区间外或不足规定帧数都不伪造成功。
 
 缓存分别记录requested_sec、pts_sec、relative_pts_sec、clip_start/end。只有明确的`videos/video_path`字段进入视频解析；其他字段即使包含MP4也不推断为视频。PNG不缩放，Stage01清晰度不受模型缩放影响。
 
