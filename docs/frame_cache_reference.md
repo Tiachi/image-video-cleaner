@@ -46,6 +46,8 @@ Stage01缓存的是blur**数值**，没有保存帧图；不能说Stage03直接�
 
 ## 5. 验证状态
 
+2026-10-23后续：新增[客户端帧外挂](portable_frame_client.md)，直接复用本项目PNG规范，不读参考项目的tensor缓存；同一HTTP封装同时服务独立单文件和Stage03。新增合成完整PNG/回环HTTP收包验证，无重新压缩/resize、准确PTS文字与原字节传输。默认request模式实际发送max_pixels，显式server_default不发并标未知。接口预检只读模型列表和合成图，不代表实际服务/清洗质量或HF像素对齐已通过。
+
 已做合成/模拟测试：同切片复用、切片/stat/解码器身份隔离、dataset namespace隔离、PTS边界、损坏manifest/PNG检测、容量停止、cache-only不解码、纯CPU预缓存不请求模型、三阶段逐QA追溯。未做真实FFmpeg、910C视觉推理、速度或精度试验。
 
 来源迁移：通用三步协调器与机械/text/media合同从私有`Tiachi/Dataset`提交`2e6c682c789a11006cbf4873d09088664e39ea8e`适配。新仓库运行不依赖Dataset源码或任何历史媒体路径。此项是独立清洗工程，无D-Spark模型/科研实验决策变化；科研主索引与历史无需更新。

@@ -2,6 +2,8 @@
 
 更新日期：2026-10-23。对象：第一次接触本项目、没有此前聊天上下文的编码/运维/质量审阅Agent。
 
+**本日后续更新：客户端帧外挂已接入。** 请先看[独立PNG客户端与精确命令](portable_frame_client.md)：新增`scripts/frame_cache_client.py`，Stage03使用同一封装器，仍是无损PNG多图＋文字时间戳，不是原生视频token。`pipeline stage03 --phase api-check`无需前序数据/FFmpeg/本地vLLM，显式一次合成视觉请求；默认把max_pixels实际发入HTTP，修复旧版只声明未发送的问题。新`vision_processor_mode=request|server_default`明确控制是否发扩展字段；server_default记远端预算未知，不自动降级。旧配置内存兼容、新代码需新Stage03输出，PNG缓存/正式Stage01/02产物保留。独立CLI可选Key环境变量，生产三阶段认证未新增。本文下方116项是此前历史基线，最新测试与边界以[验证记录](validation.md)为准；真实输入/API仍未指定。
+
 **一句话：这是独立的图片/视频视觉QA三阶段清洗工具，保留原始标注与媒体，逐步产出分流数据、属性、统计和可续跑回执；默认调用用户已启动的Qwen3.8-27B OpenAI兼容API。**
 
 文档编写时实现基线为`8a98786fde0667269d84c5b31ae2070ef040fec4`，完整服务器手册基线为`70a66ce07af429cd4fe9e16968b6d8088637bd6f`。后续Agent须先核对当前分支/HEAD；不要把这些历史基线当作永远最新版本。
@@ -280,6 +282,7 @@ identity绑定配置、源stat、运行信息/提交、相关源码/Prompt/工�
 | [media_qa_clean.py](../scripts/media_qa_clean.py) | 继承文本HTTP传输/父标签、FrameCache、多图载荷、证据、视觉属性/统计及cache命令 |
 | [media_contract.py](../scripts/media_contract.py) | 4整数协议、证据编号与矛盾约束 |
 | [frame_cache.py](../scripts/frame_cache.py) | PNG提取、源/切片/profile身份、容量账本、manifest/SHA、cache-only、锁 |
+| [frame_cache_client.py](../scripts/frame_cache_client.py) | 可复制单文件的PNG到HTTP外挂；inspect/check/request、有界请求、Stage03共用封装和显式processor模式 |
 | [vllm_service.py](../scripts/vllm_service.py) | 仅可选本地服务：config/command/memory_gate/serve，自有进程组生命周期 |
 | [sync_pull_ff_only.sh](../scripts/sync_pull_ff_only.sh) | 核对本项目origin、干净main、禁用本次代理、fetch和仅快进 |
 

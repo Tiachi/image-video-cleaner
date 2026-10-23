@@ -101,6 +101,14 @@ bash run.sh pipeline vllm --config /mnt/sfs/ltj/image-video.local.json --phase s
 
 ## 快照、修改与验证
 
+### 已有服务：先做客户端帧接口预检
+
+```bash
+bash run.sh pipeline stage03 --config /mnt/sfs/ltj/image-video.local.json --phase api-check
+```
+
+不要求前序数据/FFmpeg就绪；核对模型名并发送一次合成多图颜色顺序请求，报告在work_root/api_checks。新`stage03.vision_processor_mode`默认`request`（旧配置缺失时内存补齐）：实际将`vision_processor_kwargs`放进HTTP的`mm_processor_kwargs`，修复此前仅配置声明而未传参。若远端拒绝扩展参数，显式`server_default`不发该字段，远端预处理/预算未知，不自动回退重试。改代码/模式请使用新的Stage03输出；缓存可复用。预检通过不是生产容量或清洗准确率证明。[独立客户端、报告与完整命令](portable_frame_client.md)。
+
 统一配置按内容SHA分目录，执行前写入仅该阶段的展开配置及绑定SHA；同内容复用，不覆盖旧快照，发现被改写则停止。真实配置/快照位于外部工作目录，不进入Git。
 
 阶段仍通过原有校验器检查真实源文件、父回执、媒体根、规则值与服务配置；不绕过Git身份、原文保护或质量门禁。更改真正影响阶段运行的规则、Prompt、模型声明或代码提交时必须用新输出目录，原有结果不会被统一配置工具清空或重写。未改变的阶段配置不因其他阶段的参数调整而强行覆盖旧产物。

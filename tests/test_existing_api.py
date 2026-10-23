@@ -58,6 +58,8 @@ class TransportTests(unittest.TestCase):
                 self.assertFalse(body['chat_template_kwargs']['enable_thinking'])
                 self.assertIsNone(authorization)
             self.assertIsInstance(received[2][1]['messages'][1]['content'],list)
+            self.assertEqual(received[2][1]['mm_processor_kwargs'],{'max_pixels':262144})
+            self.assertNotIn('mm_processor_kwargs',received[0][1])
         finally:
             server.shutdown(); server.server_close(); thread.join(timeout=2)
 

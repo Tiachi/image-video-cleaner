@@ -2,6 +2,16 @@
 
 日期：2026-10-23。
 
+## 最新：独立帧缓存客户端外挂
+
+实现：`scripts/frame_cache_client.py`是Python3.10+标准库单文件，inspect/check/request无需安装vLLM或导入本管道；Stage03共用相同PNG请求封装和有界HTTP收发。新增显式统一入口api-check、实际发送processor预算（修复此前仅声明未发送）、人工server_default模式、缓存篡改停止、传输/参数侧车证据，cache版本/原始PNG/采样/评分不变。[完整说明与命令](portable_frame_client.md)。
+
+验证：新增21项测试全部通过。最终完整137项执行136通过，1项既有`test_timestamp_manifest_tamper_is_detected`在Windows目录`os.rename`遭遇WinError5；同代码单项复查通过。此前一次完整运行另有既有原子rename临时拒绝，复查亦通过；没有为了PASS跳过或修改原子发布逻辑。普通沙箱另会阻止回环TCP/临时路径，因此正式合成检查在允许回环的进程执行，临时数据在可写workspace内。不能把本记录描述成“单次完整137项无错误”。
+
+新增测试验证：完整合成PNG CRC/像素、缓存原字节与PTS、manifest/PNG篡改、缓存路径/数量/字节预算、Stage03真实HTTP的mm_processor_kwargs与Stage02无视觉参数、独立文件隔离help、统一配置旧版兼容、GET模型别名→一次多图请求、无代理、错误/重定向不重试、颜色不符不PASS、显式server_default、可选CLI认证不进报告、CLI报告防覆盖及独立缓存请求保存。没有真实数据、真实远端模型调用、NPU或下载。
+
+边界：项目仍只处理图片/视频画面。预检仅合成行为，不证明真实Qwen架构/权重、远端processor参数确实生效、生产token/显存容量、速度或视觉QA质量。独立CLI可选Key环境变量，三阶段生产认证未新增。D-Spark科研索引/历史已评估，无科研主线变更。
+
 仓库可见性：2026-10-23按用户明确要求，将且仅将`Tiachi/image-video-cleaner`改为public，GitHub API重新读取已确认。公开前检查5个分支均在本地已知历史内，扫描73个历史blob，未发现强特征凭据或数据/媒体/模型载荷。文档中的非秘密路径/历史代码出处保留；用户数据、运行配置和凭据仍禁止提交。
 
 | 项目 | 状态 |

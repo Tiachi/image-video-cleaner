@@ -4,6 +4,8 @@
 
 ## 直接调用已有服务
 
+2026-10-23新增：[独立帧缓存HTTP客户端](portable_frame_client.md)。Stage03继续PNG多图，默认将max_pixels实际发入请求（旧版仅声明而未发送已修复）；显式`server_default`则不发processor参数、标未知。先运行统一入口`stage03 --phase api-check`，不需要对方装包或重启；不把合成小图PASS当作真实Qwen/Ascend验证。独立CLI可选环境变量认证，三阶段本身仍未添加认证配置。
+
 统一配置的`api`只需`api_base`（例如`http://192.0.2.10:8018/v1`）和`model`（`qwen3.8-27b`）。不填写`service_mode`时默认`existing`，`model_revision`默认null，整个`vllm`配置段可以省略。Stage02/03调用同一个地址，程序补上`/chat/completions`。
 
 HTTP/HTTPS直连，不使用环境代理，不自动跟随重定向或重试；HTTPS沿用Python默认的证书校验。模型别名按原样发送，不自动改变大小写。无需API key的vLLM可直接使用；当前没有配置认证密钥入口。第三步要求API支持多图`image_url`；客户端的期望视觉profile不代表已验证远端processor。

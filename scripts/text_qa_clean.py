@@ -11,6 +11,7 @@ import subprocess
 import sys
 import threading
 from urllib.parse import urlparse
+import frame_cache_client as frame_api
 
 PROJECT = Path(__file__).resolve().parents[1]
 REPO = PROJECT
@@ -137,6 +138,9 @@ class Judge:
         core.require(value is not None and value[1] == raw_sha, 'stage1 row-to-QA lineage mismatch')
         return value[0]
 
+    def request_body(self, payload):
+        return frame_api.chat_body(self.config['model'], self.prompt, payload)
+
     def request(self, payload):
         if not getattr(self.local, 'client', None):
             host, port = api_location(self.config['api_base'])
@@ -145,18 +149,10 @@ class Judge:
             with self.lock:
                 self.clients.append(self.local.client)
         client = self.local.client
-        body = json.dumps({'model': self.config['model'],
-              'messages': [{'role': 'system', 'content': self.prompt}, {'role': 'user', 'content': payload}],
-              'temperature': 0, 'max_tokens': 32,
-              'chat_template_kwargs': {'enable_thinking': False}}, ensure_ascii=False).encode()
+        body = frame_api.encoded(self.request_body(payload))
         try:
-            client.request('POST', '/v1/chat/completions', body, {'Content-Type': 'application/json'})
-            response = client.getresponse(); raw = response.read(65537)
-            core.require(len(raw) <= 65536, 'response exceeds64KiB')
-            core.require(response.status == 200, 'HTTP status '+str(response.status))
-            obj = json.loads(raw, object_pairs_hook=core.unique_keys,
-                             parse_constant=core.invalid_number, parse_float=core.safe_float)
-            return obj['choices'][0]['message']['content'], obj.get('usage', {})
+            obj = frame_api.exchange(client, 'POST', '/v1/chat/completions', body)
+            return frame_api.completion(obj)
         except Exception:
             # No implicit replay after uncertain execution, including keepalive errors.
             client.close(); self.local.client = None
@@ -325,7 +321,7 @@ def main():
                'declared_model_revision': c['model_revision'], 'model_weights_verified': False,
                'model_identity_status': model_identity(c),
                'prompt_sha256': core.digest_file(PROMPT), 'producer_commit': commit}
-    files = [Path(__file__), Path(__file__).with_name('text_contract.py'), Path(core.__file__)]
+    files = [Path(__file__), Path(__file__).with_name('text_contract.py'), Path(core.__file__), Path(frame_api.__file__)]
     files += [Path(core.__file__).with_name('text_checks.py'), Path(core.__file__).with_name('media_checks.py')]
     identity = {str(x.relative_to(REPO)): core.digest_file(x) for x in files}
     root = Path(c['output'])/('pilot-%d' % limit if limit else 'full')

@@ -53,6 +53,7 @@
   "stage03": {
     "cache_namespace": "image-video",
     "frame_cache_mode": "read_write",
+    "vision_processor_mode": "request",
     "vision_processor_kwargs": {
       "max_pixels": 262144
     },

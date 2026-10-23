@@ -12,8 +12,9 @@ case "$command" in
   stage01|stage02|stage03) bash "$root/scripts/run_${command}.sh" "$@" ;;
   vllm) PYTHONDONTWRITEBYTECODE=1 "${OPD_PYTHON:-python3}" -B -u "$root/scripts/vllm_service.py" "$@" ;;
   pipeline) PYTHONDONTWRITEBYTECODE=1 "${OPD_PYTHON:-python3}" -B -u "$root/scripts/pipeline_config.py" "$@" ;;
+  frame-api) PYTHONDONTWRITEBYTECODE=1 "${OPD_PYTHON:-python3}" -B -u "$root/scripts/frame_cache_client.py" "$@" ;;
   test) PYTHONDONTWRITEBYTECODE=1 "${OPD_PYTHON:-python3}" -B -m unittest discover -s "$root/tests" -v ;;
-  help) echo 'Unified: bash run.sh pipeline init-config|show|stage01|stage02|stage03|vllm ... ; legacy: stage01|stage02|stage03|vllm ; test' ;;
+  help) echo 'Unified: bash run.sh pipeline init-config|show|stage01|stage02|stage03|vllm ... ; frame-api check|inspect|request ; legacy: stage01|stage02|stage03|vllm ; test' ;;
   *) echo '[image-video-cleaner] FAIL unknown command' >&2; exit 2 ;;
 esac
 echo '[image-video-cleaner] PASS requested command'

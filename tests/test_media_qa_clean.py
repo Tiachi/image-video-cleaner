@@ -1,4 +1,5 @@
 from copy import deepcopy
+import base64
 import hashlib
 import json
 from pathlib import Path
@@ -216,7 +217,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(attrs[0]['evidence'][0]['relative_pts_sec'],4)
         self.assertNotIn('private/media',json.dumps(VisualJudge.payloads))
         self.assertNotIn('text_labels',json.dumps(VisualJudge.payloads))
-        self.assertEqual(VisualJudge.payloads[0][1]['image_url']['url'],'data:image/png;base64,'+s.base64.b64encode(PNG).decode())
+        self.assertEqual(VisualJudge.payloads[0][1]['image_url']['url'],'data:image/png;base64,'+base64.b64encode(PNG).decode())
         self.run_stage3(c); self.assertEqual(len(VisualJudge.payloads),3)
 
     def test_multiturn_previous_context_but_no_later_answer_leakage(self):

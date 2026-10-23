@@ -1,6 +1,5 @@
 """Stage03 sampled-visual QA quality, chained to Stage02 accepted bytes."""
 import argparse
-import base64
 from collections import Counter
 import hashlib
 import json
@@ -15,11 +14,13 @@ from text_checks import extract_pairs
 from media_checks import references, blur
 from frame_cache import FrameCache, CacheCapacityError, CacheIntegrityError, CacheMissError
 from media_contract import parse, issues_for
+import frame_cache_client as frame_api
 core = text_stage.core
 PROJECT, REPO = text_stage.PROJECT, text_stage.REPO
 PROMPT = PROJECT/'prompts/media_qa_quality_v1.txt'
 DEFAULT = {'stage2_delivery': None, 'output': None, 'frame_cache_root': None,
            'cache_namespace':'image-video', 'frame_cache_mode':'read_write',
+           'vision_processor_mode':'request',
            'vision_processor_kwargs':{'max_pixels':262144},
            'frame_cache_limit_mb': 65536, 'frames_per_video': 8, 'max_images_per_request': 32,
            'max_frame_pixels': 8388608, 'max_frame_bytes': 83886080, 'max_request_image_bytes': 33554432,
@@ -52,6 +53,7 @@ def config(path, require_model=True):
     core.require(path.stat().st_size <= 128*1024, 'config too large')
     c = json.loads(path.read_bytes(), object_pairs_hook=core.unique_keys,
                    parse_constant=core.invalid_number, parse_float=core.safe_float)
+    if isinstance(c,dict): c.setdefault('vision_processor_mode','request')
     core.require(isinstance(c, dict) and set(c) == set(DEFAULT), 'config keys differ from template')
     for name in ('stage2_delivery', 'output', 'frame_cache_root'):
         core.require(isinstance(c[name], str) and Path(c[name]).is_absolute() and core.outside_repo(c[name]),
@@ -62,6 +64,7 @@ def config(path, require_model=True):
                  'invalid dataset cache namespace')
     core.require(c['frame_cache_mode'] in ('read_write','require_hit'), 'frame_cache_mode must be read_write/require_hit')
     processor = c['vision_processor_kwargs']
+    frame_api.processor_options(c['vision_processor_mode'],processor)
     core.require(isinstance(processor,dict) and set(processor)=={'max_pixels'}
                  and type(processor['max_pixels']) is int and 4096<=processor['max_pixels']<=16777216,
                  'declare bounded vision_processor_kwargs.max_pixels')
@@ -140,16 +143,16 @@ class Judge(text_stage.Judge):
         return json.loads(value[0])
 
     def content(self, frames):
-        result = []
-        for frame in frames:
-            path = Path(frame['path'])
-            data = path.read_bytes()
-            core.require(len(data) == frame['bytes'] and hashlib.sha256(data).hexdigest() == frame['sha256'],
-                         'cached PNG changed before request')
-            descriptor = {k: frame[k] for k in ('frame_id', 'media_index', 'relative_pts_sec', 'clip_start', 'clip_end')}
-            result += [{'type': 'text', 'text': json.dumps(descriptor)},
-                       {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,'+base64.b64encode(data).decode('ascii')}}]
-        return result
+        try:
+            return frame_api.png_content(frames, max_frames=self.config['max_images_per_request'],
+                max_frame_bytes=self.config['max_frame_bytes'], max_bytes=self.config['max_request_image_bytes'])
+        except (ValueError, OSError) as exc:
+            raise CacheIntegrityError('cached PNG evidence changed/invalid before HTTP request') from exc
+
+    def request_body(self, payload):
+        return frame_api.chat_body(self.config['model'], self.prompt, payload,
+            processor_kwargs=frame_api.processor_options(self.config.get('vision_processor_mode','request'),
+                self.config.get('vision_processor_kwargs', DEFAULT['vision_processor_kwargs'])))
 
     def score_visual(self, payload_text, images, frames):
         if len(payload_text) > self.config['max_input_chars']:
@@ -161,7 +164,10 @@ class Judge(text_stage.Judge):
                           and type(v) is int and v >= 0}
             evidence = [{k: frames[index-1][k] for k in ('frame_id','cache_key','file','relative_pts_sec')}
                         for index in labels['evidence_frame_ids']]
-            return {'status': 'ok', 'model_calls': 1, 'labels': labels, 'evidence': evidence, 'usage': safe_usage}
+            return {'status': 'ok', 'model_calls': 1, 'labels': labels, 'evidence': evidence, 'usage': safe_usage,
+                    'frame_transport':frame_api.VERSION,
+                    'requested_vision_processor_kwargs':frame_api.processor_options(
+                        self.config.get('vision_processor_mode','request'),self.config['vision_processor_kwargs'])}
         except Exception as exc:
             return {'status': 'model_error', 'model_calls': 1,
                     'error_type': type(exc).__name__, 'error': str(exc)[:200]}
@@ -269,6 +275,8 @@ def write_attributes(stage, parts, summary):
                         data = core.encoded({'stage2_accepted_row':a['source_row'], 'original_source_row':a['original_source_row'],
                             'source_row_sha256':a['raw_sha256'], 'qa_index':qa['qa_index'], 'row_status':a['status'],
                             'label_status':qa['status'], 'media_labels':qa.get('labels'), 'evidence':qa.get('evidence',[]),
+                            'frame_transport':qa.get('frame_transport'),
+                            'requested_vision_processor_kwargs':qa.get('requested_vision_processor_kwargs'),
                             'text_labels':previous['labels'], 'cot_candidate':a['status']=='accepted' and previous['labels']['cot_class']==2})
                         out.write(data); h.update(data); size += len(data)
         out.flush(); text_stage.os.fsync(out.fileno())
@@ -331,8 +339,11 @@ def main():
                    api_base=c['api_base'], model=c['model'], declared_model_revision=c['model_revision'],
                    model_identity_status=text_stage.model_identity(c),
                    model_weights_verified=False, declared_vision_processor_kwargs=c['vision_processor_kwargs'],
+                   frame_transport=frame_api.VERSION,
+                   processor_kwargs_sent=args.command!='cache' and c['vision_processor_mode']=='request',
+                   frame_transport_sha256=core.digest_file(Path(frame_api.__file__)),
                    processor_profile_verified=False)
-    files = [Path(__file__), Path(text_stage.__file__), Path(core.__file__), Path(blur.__file__)]
+    files = [Path(__file__), Path(text_stage.__file__), Path(core.__file__), Path(blur.__file__), Path(frame_api.__file__)]
     files += [Path(__file__).with_name(n) for n in ('media_contract.py','frame_cache.py','text_contract.py')]
     files += [Path(core.__file__).with_name(n) for n in ('text_checks.py','media_checks.py')]
     identity = {str(p.relative_to(REPO)):core.digest_file(p) for p in files}

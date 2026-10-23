@@ -18,6 +18,8 @@
 
 ## 帧缓存：参考 Unimoe2d5_inference
 
+**已有远端服务的客户端外挂已独立实现**：[完整说明与命令](docs/portable_frame_client.md)。只需`/v1`地址和准确模型名，客户端读PNG缓存后通过多图HTTP发送，对方不改源码、不装插件、不挂载缓存。显式预检：`bash run.sh pipeline stage03 --config /你的外部配置.json --phase api-check`。默认实际发送配置中的processor预算；网关不支持时可显式选`server_default`，不自动降级。缓存仍是原生PNG，不改成UniMoE的JPEG/tensor或原生视频协议。
+
 已阅读参考仓库固定提交的实际代码，并采用：**数据集/采样配置隔离、文件与解码器身份、完成标记最后发布、缓存校验、显式CPU预缓存、cache-only缺失不解码**。具体源码链接、固定SHA、采用点与差异见[缓存参考与设计](docs/frame_cache_reference.md)。
 
 本项目缓存是原生PNG，模型无关，不直接读UniMoE原始RGB `.npy` 或HF缩放后JPEG `.pt`。视频默认在`video_start/video_end`实际区间内均匀抽8帧，保留请求时间与实际解码PTS；同视频不同切片隔离，同切片多QA复用。图片缓存第一帧。`frame_cache_mode=read_write`可边准备边评审；`require_hit`只读已准备缓存、缺失即停。

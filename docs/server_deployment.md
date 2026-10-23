@@ -343,6 +343,14 @@ bash run.sh pipeline vllm --config /mnt/sfs/ltj/media_cleaning/configs/my_datase
 
 ## 11. 常见阻塞速查
 
+第三步正式调用前可执行已有服务预检，无需启动新服务或准备前序数据：
+
+```bash
+bash run.sh pipeline stage03 --config /mnt/sfs/ltj/media_cleaning/configs/my_dataset.json --phase api-check
+```
+
+报告在work_root/api_checks；只发一次合成多图模型请求，校验别名与颜色顺序。processor参数拒绝时不会自动删参重试，可显式`vision_processor_mode=server_default`后重新预检并记录远端预算未知。[外挂客户端及限制](portable_frame_client.md)。
+
 | 现象 | 处理 |
 |---|---|
 | clone/fetch permission denied | 公开仓库HTTPS读取无需认证；核对URL/凭据或使用HTTPS；SSH和push仍需权限，不切个人代理 |

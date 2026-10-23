@@ -70,6 +70,7 @@ def resolve(c):
     if isinstance(c.get('api'),dict):
         c['api'].setdefault('model_revision',None)
         c['api'].setdefault('service_mode','existing')
+    if isinstance(c.get('stage03'),dict): c['stage03'].setdefault('vision_processor_mode','request')
     core.require(isinstance(c,dict) and set(c)==set(DEFAULT),'unified config keys differ from template')
     core.require(type(c['schema_version']) is int and c['schema_version']==1,'unsupported schema_version')
     for key in ('paths','tools','api','stage01','stage02','stage03','vllm'):
@@ -121,6 +122,7 @@ def resolve(c):
             stage2_delivery=str(out['stage02_output']/'full/delivery'),output=str(out['stage03_output']),
             frame_cache_root=str(out['frame_cache_root']))
     processor=s3['vision_processor_kwargs']
+    media_stage.frame_api.processor_options(s3['vision_processor_mode'],processor)
     core.require(type(processor['max_pixels']) is int and 4096<=processor['max_pixels']<=16777216,
                  'invalid stage03.vision_processor_kwargs.max_pixels')
     core.require(type(s3['max_images_per_request']) is int and 1<=s3['max_images_per_request']<=32,
@@ -160,7 +162,7 @@ def interpreter(resolved,stage):
 
 def child_command(resolved,stage,phase,config_path,rows=None):
     allowed={'stage01':{'pilot','run'},'stage02':{'pilot','run'},
-             'stage03':{'pilot','run','cache'},'vllm':{'print','serve'}}
+             'stage03':{'pilot','run','cache','api-check'},'vllm':{'print','serve'}}
     core.require(phase in allowed[stage],'unsupported phase for '+stage)
     scripts={'stage01':'mechanical_clean.py','stage02':'text_qa_clean.py',
              'stage03':'media_qa_clean.py','vllm':'vllm_service.py'}
@@ -172,6 +174,11 @@ def child_command(resolved,stage,phase,config_path,rows=None):
                      'managed service binds HTTP127.0.0.1; use existing mode for remote/HTTPS APIs')
     cmd=[interpreter(resolved,stage),'-B','-u',str(core.REPO/'scripts'/scripts[stage]),
          phase,'--config',str(config_path)]
+    if stage=='stage03' and phase=='api-check':
+        import time
+        report=Path(resolved['snapshot_root']).parent/'api_checks'/('frame-api-'+str(time.time_ns())+'.json')
+        cmd=[interpreter(resolved,stage),'-B','-u',str(core.REPO/'scripts/frame_cache_client.py'),
+             'check','--config',str(config_path),'--output',str(report)]
     if rows is not None:
         core.require(stage!='vllm' and phase in ('pilot','cache') and type(rows) is int and 1<=rows<=10000,
                      '--rows only supports pilot/cache,1..10000')
@@ -186,7 +193,7 @@ def main():
     show=subs.add_parser('show'); show.add_argument('--config',type=Path,required=True)
     for stage in ('stage01','stage02','stage03','vllm'):
         p=subs.add_parser(stage); p.add_argument('--config',type=Path,required=True)
-        phases=('print','serve') if stage=='vllm' else (('pilot','run','cache') if stage=='stage03' else ('pilot','run'))
+        phases=('print','serve') if stage=='vllm' else (('pilot','run','cache','api-check') if stage=='stage03' else ('pilot','run'))
         p.add_argument('--phase',choices=phases,default='print' if stage=='vllm' else 'pilot')
         if stage!='vllm': p.add_argument('--rows',type=int)
     args=parser.parse_args()
