@@ -6,7 +6,7 @@
 
 ## 1. 代码、数据与依赖
 
-建议新代码checkout：`/mnt/sfs/ltj/project/image-video-cleaner`，私有仓库`Tiachi/image-video-cleaner`；数据输出`/mnt/sfs/ltj/media_cleaning/<任务名>/`。原数据仍在原位置，只读。
+建议新代码checkout：`/mnt/sfs/ltj/project/image-video-cleaner`，公开仓库`Tiachi/image-video-cleaner`（HTTPS读取无需认证）；数据输出`/mnt/sfs/ltj/media_cleaning/<任务名>/`。原数据仍在原位置，只读。
 
 Python>=3.10；清洗端无pip依赖。FFmpeg/ffprobe须可用并带blurdetect；本项目不下载工具或模型。已有Qwen服务只需API地址与模型名；自行启动时才需要兼容vLLM-Ascend环境、本地权重路径与冻结revision。
 

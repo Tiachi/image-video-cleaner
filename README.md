@@ -1,5 +1,7 @@
 # Image Video Cleaner：图片/视频三步清洗管道
 
+公开仓库：[Tiachi/image-video-cleaner](https://github.com/Tiachi/image-video-cleaner)，2026-10-23按用户要求改为public，HTTPS克隆/阅读无需登录。
+
 只处理**图片和视频画面**，不处理声音。默认调用已有 **Qwen3.8-27B + vLLM**；本机或远程服务只需API地址和模型名。原始JSONL和媒体保持不变，每一步独立交付中间产物与统计，支持完整块续跑。
 
 当前状态：已实现并完成合成测试。没有指定真实输入，没有启动媒体扫描、模型或NPU；不把格式校验通过当作人工质量认证。

@@ -9,6 +9,6 @@
 - Follow clip-aware cache identities, namespace/profile separation, immutable atomic publication, source/decoder metadata checks and explicit cache-only mode. Do not read UniMoE's RGB/JPEG tensor caches as if they were this project's PNG frames.
 - Never traverse a large media tree. Read exact annotation-derived allowlisted paths, bound concurrency/decoding, and stop on cache corruption/capacity exhaustion.
 - No datasets, media, cache, SQLite, logs, model weights, credentials, private runtime configs or private keys in Git. Stage exact reviewed paths; never blanket stage.
-- Default private upstream: https://github.com/Tiachi/image-video-cleaner. Main is stable; use codex/ task branches for later changes. Verify owner/name, visibility and remote commit SHA. Preserve dirty checkouts and use fast-forward synchronization only.
+- Public upstream (user decision 2026-10-23): https://github.com/Tiachi/image-video-cleaner. Main is stable; use codex/ task branches for later changes. Verify owner/name, public visibility and remote commit SHA. Preserve dirty checkouts and use fast-forward synchronization only. Only this repository was made public; do not change other repositories' visibility.
 - Direct server inspection and reviewed transfers are authorized for requested work. No personal proxy for downloads/Git unless explicitly authorized for that operation. Do not start a model or real data scan until inputs/config are specified.
 - Keep runbooks and provenance in docs/. Record documented/implemented/locally tested/server-tested states separately.

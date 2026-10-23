@@ -14,11 +14,11 @@
 4. 按任务阅读[配置说明](configuration.md)、[三阶段合同](pipeline_contract.md)、[帧缓存设计](frame_cache_reference.md)；实际部署按[完整命令手册](server_deployment.md)。
 5. 需要改行为时，读对应源码和测试后再改。文档与代码不一致应查明并修复，不通过重新解释用户需求来迎合旧实现。
 
-若只接收这一份文档、无法访问私有仓库，可以据此了解目标与合同，但**不能据此声称已审查最新代码、实际数据或服务**。应让用户提供必要源码/执行结果，不猜未提供的路径和运行状态。
+若只接收这一份文档、无法访问仓库，可以据此了解目标与合同，但**不能据此声称已审查最新代码、实际数据或服务**。本仓库已公开，可直接读取代码；历史参考仓库可能仍为私有，无法访问时应让用户提供必要源码/执行结果，不猜未提供的路径和运行状态。
 
 ## 2. 用户究竟要什么：已确认的需求与取舍
 
-用户此前在`Tiachi/Dataset`做过图片重构、音视频质量/任务分类和音频清洗。这次希望借鉴历史经验，建立**新的独立私有项目**，范围限定为图片和视频画面，不处理声音。不要把历史音频、6M音视频池、1M/3M图片池的结果冒充这个新项目的产物。
+用户此前在`Tiachi/Dataset`做过图片重构、音视频质量/任务分类和音频清洗。这次希望借鉴历史经验，建立**新的独立项目**，范围限定为图片和视频画面，不处理声音。项目最初为私有，2026-10-23用户明确要求改为public，已验证公开；只改变本仓库可见性。不要把历史音频、6M音视频池、1M/3M图片池的结果冒充这个新项目的产物。
 
 | 用户已确认事项 | 当前实现/边界 |
 |---|---|
@@ -39,7 +39,7 @@
 
 | 项目 | 地址/状态 |
 |---|---|
-| 独立私有仓库 | [Tiachi/image-video-cleaner](https://github.com/Tiachi/image-video-cleaner) |
+| 独立公开仓库 | [Tiachi/image-video-cleaner](https://github.com/Tiachi/image-video-cleaner)，HTTPS读取无需认证 |
 | 稳定分支 | `main`；开发分支`codex/<任务名>` |
 | 当前本地源码位置 | `C:/Users/Tiachi/Documents/Dataset/x_temp/image-video-cleaner`；它有自己的Git仓库，运行不依赖父目录源码 |
 | 建议服务器代码位置 | `/mnt/sfs/ltj/project/image-video-cleaner`；**尚未实际部署验证** |
@@ -48,7 +48,7 @@
 | 历史工程 | [Tiachi/Dataset](https://github.com/Tiachi/Dataset)，通用实现适配来源提交`2e6c682c789a11006cbf4873d09088664e39ea8e` |
 | 帧缓存参考 | [Tiachi/Unimoe2d5_inference](https://github.com/Tiachi/Unimoe2d5_inference)，固定参考`6f840b71b4cb0f9e151a44031fab1848ac1c4673` |
 
-不要在独立仓库使用旧Dataset仓库的origin校验或同步入口。服务器既有的Dataset单仓库deploy key不自动拥有新私有仓库权限。SSH检查和已审阅文件传输在用户任务范围内已授权，GitHub是代码备份与协作渠道，不是直接服务器操作的硬性前置。
+不要在独立仓库使用旧Dataset仓库的origin校验或同步入口。公开HTTPS读取不需要deploy key；服务器既有的Dataset单仓库deploy key不自动拥有本仓库写权限。SSH检查和已审阅文件传输在用户任务范围内已授权，GitHub是代码备份与协作渠道，不是直接服务器操作的硬性前置。
 
 ## 4. 当前究竟完成到哪里
 
@@ -57,7 +57,7 @@
 | 已实现 | 三阶段、统一配置、原文字节分流、逐QA属性/统计、断点回执、PNG缓存、已有HTTP(S)API调用、可选16卡启动器 |
 | 本地已验证 | 116项标准库unittest通过；Python AST、Bash语法、模板对应、链接、模拟HTTP请求与严格模型协议等 |
 | 已写并检查文档 | 完整服务器手册，28个Bash代码块语法检查；不是实际部署/安装成功 |
-| GitHub已维护 | 私有仓库main，代码/配置/Prompt/测试/文档；没有数据/媒体/模型负载 |
+| GitHub已维护 | 公开仓库main，代码/配置/Prompt/测试/文档；没有数据/媒体/模型负载 |
 | 真实FFmpeg清洗 | **未运行验证**，本地没有FFmpeg/ffprobe |
 | 真实Qwen服务/910C启动、速度、标签准确率 | **未验证**；模拟服务通过不等于真实视觉能力/质量通过 |
 | 本项目实际清洗量、交付数据池 | **没有**，没有指定输入，未运行真实数据 |
@@ -281,7 +281,7 @@ identity绑定配置、源stat、运行信息/提交、相关源码/Prompt/工�
 | [media_contract.py](../scripts/media_contract.py) | 4整数协议、证据编号与矛盾约束 |
 | [frame_cache.py](../scripts/frame_cache.py) | PNG提取、源/切片/profile身份、容量账本、manifest/SHA、cache-only、锁 |
 | [vllm_service.py](../scripts/vllm_service.py) | 仅可选本地服务：config/command/memory_gate/serve，自有进程组生命周期 |
-| [sync_pull_ff_only.sh](../scripts/sync_pull_ff_only.sh) | 核对私有origin、干净main、禁用本次代理、fetch和仅快进 |
+| [sync_pull_ff_only.sh](../scripts/sync_pull_ff_only.sh) | 核对本项目origin、干净main、禁用本次代理、fetch和仅快进 |
 
 建议顺序：pipeline_config → mechanical_clean的run/decision/publish → text/media_checks → text_qa_clean+contract → frame_cache → media_qa_clean+contract → 对应测试。不要只读包装脚本就断言恢复或统计正确。
 
@@ -320,7 +320,7 @@ bash run.sh test
 
 仓库只存代码、无秘密模板、Prompt、测试、文档。原/派生JSONL、媒体、模型、SQLite、缓存、完整日志、实际私密配置/密钥不可提交。`.gitignore`不是安全认证，仍须逐文件审阅、精确路径暂存；不git add .或-A。
 
-同步要求核对owner/repo/private、分支、干净状态、仅快进和远端SHA。不要force push、自动stash/reset/clean；保留未知工作。常规代码/文档发布已获用户持续授权，不再机械重复询问，但不能跳过环境审批。Git传输失败可使用官方GitHub Git Database API作代码备份；必须核对文件树、父提交、内容和远端SHA，不上传数据，不把本地未发布提交说成已发布。
+同步要求核对owner/repo/public可见性、分支、干净状态、仅快进和远端SHA。不要force push、自动stash/reset/clean；保留未知工作。常规代码/文档发布已获用户持续授权，不再机械重复询问，但不能跳过环境审批。Git传输失败可使用官方GitHub Git Database API作代码备份；必须核对文件树、父提交、内容和远端SHA，不上传数据，不把本地未发布提交说成已发布。
 
 服务器下载（Git、依赖、模型等）**默认禁止使用用户个人Clash/代理**。检查代理键/环境，单次操作用直连或批准路由，不改无关持久设置。历史GitHub排障授权不构成以后下载的个人代理通行证。
 
@@ -343,4 +343,4 @@ bash run.sh test
 
 ## 16. 可直接转发给下一位模型的接手指令
 
-> 请阅读私有Tiachi/image-video-cleaner仓库的AGENTS.md和docs/AGENT_HANDOFF.md，再按任务查对应源码/测试。项目仅清洗图片和视频画面，三阶段为机械→文本QA→视觉QA，每步保留原文字节分流、属性、统计和回执。CoT编码固定0已有、1无且不适合、2无且适合，不生成CoT。默认调用已有vLLM，只需/v1 URL和准确模型名，不要求权重路径。当前代码已做116项合成测试，但尚未提供真实输入/API，未运行实际清洗；不要把历史Dataset百万池成果当成本项目结果。保留原数据/已有工作，续跑核对identity与parts，不对不确定请求盲目重发，不用个人代理，不上传数据；完整服务器步骤在docs/server_deployment.md。先报告你核实的当前HEAD、任务范围、真实已知/未知项，再继续用户授权的工作。
+> 请阅读公开Tiachi/image-video-cleaner仓库的AGENTS.md和docs/AGENT_HANDOFF.md，再按任务查对应源码/测试。项目仅清洗图片和视频画面，三阶段为机械→文本QA→视觉QA，每步保留原文字节分流、属性、统计和回执。CoT编码固定0已有、1无且不适合、2无且适合，不生成CoT。默认调用已有vLLM，只需/v1 URL和准确模型名，不要求权重路径。当前代码已做116项合成测试，但尚未提供真实输入/API，未运行实际清洗；不要把历史Dataset百万池成果当成本项目结果。保留原数据/已有工作，续跑核对identity与parts，不对不确定请求盲目重发，不用个人代理，不上传数据；完整服务器步骤在docs/server_deployment.md。先报告你核实的当前HEAD、任务范围、真实已知/未知项，再继续用户授权的工作。

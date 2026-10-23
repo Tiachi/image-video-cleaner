@@ -1,6 +1,6 @@
 # 服务器部署、配置与三阶段运行命令手册
 
-日期：2026-10-23。仓库：私有 [Tiachi/image-video-cleaner](https://github.com/Tiachi/image-video-cleaner)。仅处理图片和视频画面，不读声音。本手册以**复用已有vLLM服务**为默认流程；只有最后的可选章节需要本机模型权重和16张NPU。
+日期：2026-10-23。仓库：公开 [Tiachi/image-video-cleaner](https://github.com/Tiachi/image-video-cleaner)，HTTPS读取无需认证。仅处理图片和视频画面，不读声音。本手册以**复用已有vLLM服务**为默认流程；只有最后的可选章节需要本机模型权重和16张NPU。
 
 当前状态：代码与合成测试已验证；下面的服务器目录是建议部署位置，尚未实际部署。没有收到真实标注路径和API地址，不能声称已在服务器完成清洗或模型验收。各代码块按章节依次执行；任一步FAIL先处理报错，不继续下一阶段。尖括号/中文占位须替换为真实值。
 
@@ -37,7 +37,7 @@ env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u al
   clone --branch main --single-branch https://github.com/Tiachi/image-video-cleaner.git image-video-cleaner
 ```
 
-这是私有仓库，需要当前服务器的GitHub凭据有**该仓库**读取权限。若HTTPS提示密码，应使用GitHub访问令牌或已有凭据管理器，不把令牌写入命令、URL、配置或发到聊天。Dataset的repository deploy key不自动拥有新仓库权限；认证失败应先给该新仓库配置现有账号/批准的SSH密钥访问权限，不通过个人代理绕过。
+本仓库已按用户要求改为public，以上HTTPS clone/fetch无需GitHub令牌或deploy key。推送代码仍需写权限；若采用SSH地址，仍需相应SSH认证，Dataset的单仓库deploy key不自动拥有本仓库写权限。遇到异常认证提示先核对实际URL和本机凭据/网络配置，不把令牌写入命令、URL或发到聊天，也不切换个人代理。
 
 如果代码目录已经存在，**跳过clone，不覆盖目录**，改用：
 
@@ -345,7 +345,7 @@ bash run.sh pipeline vllm --config /mnt/sfs/ltj/media_cleaning/configs/my_datase
 
 | 现象 | 处理 |
 |---|---|
-| clone/fetch permission denied | 核对新私有仓库权限；Dataset的单仓库deploy key不通用；不切个人代理 |
+| clone/fetch permission denied | 公开仓库HTTPS读取无需认证；核对URL/凭据或使用HTTPS；SSH和push仍需权限，不切个人代理 |
 | Python版本过旧 | 设置OPD_PYTHON到已有3.10+；同时更新tools.python |
 | FFmpeg/blurdetect缺失 | 安装匹配系统的软件包，或配置现有ffmpeg/ffprobe绝对路径 |
 | Stage01几乎全部review | 先查clarity_threshold_uncalibrated、媒体路径/QA结构，不直接跑后两步 |
