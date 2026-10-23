@@ -2,6 +2,8 @@
 
 日期：2026-10-23。以下为指定输入和部署后的操作。当前服务器路径尚未创建，未扫描真实媒体。
 
+首次部署、安装依赖、配置API、校准阈值和完整运行顺序，见[服务器完整命令手册](server_deployment.md)。本文为已有环境下的简版及兼容入口。
+
 ## 1. 代码、数据与依赖
 
 建议新代码checkout：`/mnt/sfs/ltj/project/image-video-cleaner`，私有仓库`Tiachi/image-video-cleaner`；数据输出`/mnt/sfs/ltj/media_cleaning/<任务名>/`。原数据仍在原位置，只读。
