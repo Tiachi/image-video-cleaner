@@ -30,7 +30,8 @@ DEFAULT = {
              'stage01_output':None, 'stage02_output':None, 'stage03_output':None,
              'frame_cache_root':None, 'vllm_runtime_root':None, 'scratch_root':None},
     'tools':{'python':None, 'vllm_python':None, 'ffmpeg':'ffmpeg', 'ffprobe':'ffprobe'},
-    'api':{'api_base':'http://127.0.0.1:8018/v1', 'model':'Qwen3.8-27B', 'model_revision':None},
+    'api':{'api_base':'http://127.0.0.1:8018/v1', 'model':'qwen3.8-27b',
+           'model_revision':None, 'service_mode':'existing'},
     'stage01':settings(core.DEFAULT,BOUND1),
     'stage02':settings(text_stage.DEFAULT,BOUND2),
     'stage03':settings(media_stage.DEFAULT,BOUND3),
@@ -62,6 +63,13 @@ def overlaps(a,b):
 
 
 def resolve(c):
+    # Old configs remain valid; an existing API needs only its URL and served alias.
+    core.require(isinstance(c,dict),'unified config must be an object')
+    c=deepcopy(c)
+    c.setdefault('vllm',deepcopy(DEFAULT['vllm']))
+    if isinstance(c.get('api'),dict):
+        c['api'].setdefault('model_revision',None)
+        c['api'].setdefault('service_mode','existing')
     core.require(isinstance(c,dict) and set(c)==set(DEFAULT),'unified config keys differ from template')
     core.require(type(c['schema_version']) is int and c['schema_version']==1,'unsupported schema_version')
     for key in ('paths','tools','api','stage01','stage02','stage03','vllm'):
@@ -79,7 +87,9 @@ def resolve(c):
         ('stage01_output','stage01'),('stage02_output','stage02'),('stage03_output','stage03'),
         ('frame_cache_root','frame_cache'),('vllm_runtime_root','vllm_runtime'))}
     scratch=absolute(paths['scratch_root'],'paths.scratch_root',True)
-    model=absolute(c['vllm']['model_path'],'vllm.model_path',True)
+    mode=c['api']['service_mode']
+    core.require(mode in ('existing','managed'),'api.service_mode must be existing or managed')
+    model=absolute(c['vllm']['model_path'],'vllm.model_path',True) if mode=='managed' else None
     protected=roots+([source] if source else [])+([model] if model else [])
     snapshots=(work/'config_snapshots').resolve()
     writable=[work,snapshots,*out.values()]+([scratch] if scratch else [])
@@ -93,15 +103,14 @@ def resolve(c):
     core.require(not any(overlaps(snapshots,p) for p in peers),
                  'config_snapshots overlaps an output/cache/runtime/scratch root')
     text_stage.api_location(c['api']['api_base'])
-    core.require(isinstance(c['api']['model'],str) and c['api']['model'].strip(),'api.model required')
-    core.require(c['api']['model_revision'] is None or isinstance(c['api']['model_revision'],str)
-                 and c['api']['model_revision'].strip(),'invalid api.model_revision')
+    text_stage.model_identity(c['api'])
     for key in ('python','vllm_python'):
         core.require(c['tools'][key] is None or isinstance(c['tools'][key],str) and c['tools'][key].strip(),
                      'invalid tools.'+key)
     for key in ('ffmpeg','ffprobe'):
         core.require(isinstance(c['tools'][key],str) and c['tools'][key].strip(),'invalid tools.'+key)
-    api=deepcopy(c['api']); common={'scratch_root':str(scratch) if scratch else None}
+    api={k:deepcopy(c['api'][k]) for k in ('api_base','model','model_revision')}
+    common={'scratch_root':str(scratch) if scratch else None}
     tools={k:c['tools'][k] for k in ('ffmpeg','ffprobe')}
     s1=dict(deepcopy(c['stage01']),**common,**tools,source=str(source) if source else None,
             media_root=str(media) if media else None,allowed_media_roots=[str(p) for p in roots],
@@ -118,10 +127,10 @@ def resolve(c):
                  'invalid stage03.max_images_per_request')
     vllm=dict(deepcopy(c['vllm']),model_path=str(model) if model else None,
               runtime_root=str(out['vllm_runtime_root']),served_model_name=api['model'],
-              model_revision=api['model_revision'],port=urlparse(api['api_base']).port or 80,
+              model_revision=api['model_revision'],port=text_stage.api_location(api['api_base'])[1],
               max_images_per_prompt=s3['max_images_per_request'],vision_max_pixels=processor['max_pixels'])
     return {'stage01':s1,'stage02':s2,'stage03':s3,'vllm':vllm,
-            'snapshot_root':str(snapshots),
+            'snapshot_root':str(snapshots), 'service_mode':mode,
             'python':c['tools']['python'], 'vllm_python':c['tools']['vllm_python']}
 
 
@@ -156,8 +165,11 @@ def child_command(resolved,stage,phase,config_path,rows=None):
     scripts={'stage01':'mechanical_clean.py','stage02':'text_qa_clean.py',
              'stage03':'media_qa_clean.py','vllm':'vllm_service.py'}
     if stage=='vllm':
-        core.require(urlparse(resolved['stage03']['api_base']).hostname in ('127.0.0.1','localhost'),
-                     'managed service binds127.0.0.1; use existing service for other loopback hosts')
+        core.require(resolved['service_mode']=='managed',
+                     'existing API mode never starts a service; set api.service_mode=managed to launch locally')
+        api=urlparse(resolved['stage03']['api_base'])
+        core.require(api.scheme=='http' and api.hostname in ('127.0.0.1','localhost'),
+                     'managed service binds HTTP127.0.0.1; use existing mode for remote/HTTPS APIs')
     cmd=[interpreter(resolved,stage),'-B','-u',str(core.REPO/'scripts'/scripts[stage]),
          phase,'--config',str(config_path)]
     if rows is not None:

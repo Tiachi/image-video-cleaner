@@ -23,7 +23,7 @@ DEFAULT = {'stage2_delivery': None, 'output': None, 'frame_cache_root': None,
            'vision_processor_kwargs':{'max_pixels':262144},
            'frame_cache_limit_mb': 65536, 'frames_per_video': 8, 'max_images_per_request': 32,
            'max_frame_pixels': 8388608, 'max_frame_bytes': 83886080, 'max_request_image_bytes': 33554432,
-           'api_base': 'http://127.0.0.1:8018/v1', 'model': 'Qwen3.8-27B', 'model_revision': None,
+           'api_base': 'http://127.0.0.1:8018/v1', 'model': 'qwen3.8-27b', 'model_revision': None,
            'workers': 8, 'part_rows': 32, 'timeout_seconds': 120, 'max_input_chars': 24000,
            'scratch_root': None, 'scratch_limit_mb': 8192, 'minimum_score': None,
            'ffmpeg': 'ffmpeg', 'ffprobe': 'ffprobe'}
@@ -57,8 +57,7 @@ def config(path, require_model=True):
         core.require(isinstance(c[name], str) and Path(c[name]).is_absolute() and core.outside_repo(c[name]),
                      name+' must be absolute and outside code')
         c[name] = str(Path(c[name]).resolve())
-    for name in (('model', 'model_revision') if require_model else ('model',)):
-        core.require(isinstance(c[name], str) and c[name].strip(), 'declare '+name)
+    text_stage.model_identity(c)
     core.require(isinstance(c['cache_namespace'],str) and re.fullmatch(r'[A-Za-z0-9_-]{1,64}',c['cache_namespace']),
                  'invalid dataset cache namespace')
     core.require(c['frame_cache_mode'] in ('read_write','require_hit'), 'frame_cache_mode must be read_write/require_hit')
@@ -330,6 +329,7 @@ def main():
         tools[name+'_version'] = blur.run_command([tools[name],'-version'],15).splitlines()[0]
     runtime = dict(tools, stage='media_qa_v1', producer_commit=commit, prompt_sha256=core.digest_file(PROMPT),
                    api_base=c['api_base'], model=c['model'], declared_model_revision=c['model_revision'],
+                   model_identity_status=text_stage.model_identity(c),
                    model_weights_verified=False, declared_vision_processor_kwargs=c['vision_processor_kwargs'],
                    processor_profile_verified=False)
     files = [Path(__file__), Path(text_stage.__file__), Path(core.__file__), Path(blur.__file__)]

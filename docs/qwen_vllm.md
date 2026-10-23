@@ -1,12 +1,20 @@
 # Qwen3.8-27B接口与16卡暂定配置
 
-日期：2026-10-23。沿用用户此前本地服务名Qwen3.8-27B和TP2/DP8形式，使用本地既有权重/兼容vLLM-Ascend，不下载模型。过去纯文本速度不代表本项目视觉请求速度。
+日期：2026-10-23。默认调用用户提供的已有服务，模型名默认`qwen3.8-27b`。下列16卡配置仅用于可选的本地启动；已有服务无需知道权重路径、模型版本、TP/DP或vLLM环境。过去纯文本速度不代表本项目视觉请求速度。
+
+## 直接调用已有服务
+
+统一配置的`api`只需`api_base`（例如`http://192.0.2.10:8018/v1`）和`model`（`qwen3.8-27b`）。不填写`service_mode`时默认`existing`，`model_revision`默认null，整个`vllm`配置段可以省略。Stage02/03调用同一个地址，程序补上`/chat/completions`。
+
+HTTP/HTTPS直连，不使用环境代理，不自动跟随重定向或重试；HTTPS沿用Python默认的证书校验。模型别名按原样发送，不自动改变大小写。无需API key的vLLM可直接使用；当前没有配置认证密钥入口。第三步要求API支持多图`image_url`；客户端的期望视觉profile不代表已验证远端processor。
+
+仅知道别名时，运行身份记录`model_identity_status=endpoint_alias_only`、`declared_model_revision=null`、`model_weights_verified=false`。如远端更换权重/模板，应使用新输出目录，不能仅凭同名别名证明旧块适合续跑。
 
 ## 暂定服务配置
 
 | 参数 | 初始值/理由 |
 |---|---|
-| OpenAI兼容API | `http://127.0.0.1:8018/v1`，model=`Qwen3.8-27B` |
+| OpenAI兼容API | `http://127.0.0.1:8018/v1`，model=`qwen3.8-27b` |
 | TP/DP | 2×8，共16张可见NPU |
 | API进程 | 4 |
 | max_model_len / batch tokens | 32768 / 32768 |
@@ -29,6 +37,6 @@ Stage03 `vision_processor_kwargs`记录期望的服务配置，不通过每请�
 
 ## 运行与验证边界
 
-先`bash run.sh vllm print --config <外部配置>`审阅命令，再serve。若所用vLLM版本不支持暂定优化参数，应看本次精确启动日志、调整新配置；不静默取消优化/切模型并复用旧身份。输入/依赖未指定前不启动。
+已有服务直接执行清洗阶段，无需运行任何vllm启动命令。只有自行启动时，将统一配置`api.service_mode`设为`managed`，填写权重路径、revision和模型Python，并使用本机HTTP地址；再执行`pipeline vllm --phase print|serve`。兼容独立服务入口仍为`bash run.sh vllm print --config <独立服务配置>`，再serve。若所用vLLM版本不支持暂定优化参数，应看本次精确启动日志、调整新配置；不静默取消优化/切模型并复用旧身份。输入/依赖未指定前不启动。
 
 本地验证是命令构造、内存门禁和HTTP协议模拟，不是910C启动成功、吞吐或标签准确率。prefix缓存减少可共享前缀的计算；processor缓存避免部分重复预处理；磁盘帧缓存减少解码，三者不能混为同一命中率，也不保证免去视觉编码或LLM推理。

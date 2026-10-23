@@ -12,7 +12,7 @@ import time
 import mechanical_clean as core
 
 DEFAULT = {'model_path':None, 'model_revision':None, 'runtime_root':None,
-           'served_model_name':'Qwen3.8-27B', 'port':8018, 'tensor_parallel_size':2,
+           'served_model_name':'qwen3.8-27b', 'port':8018, 'tensor_parallel_size':2,
            'data_parallel_size':8, 'api_server_count':4, 'max_model_len':32768,
            'max_num_batched_tokens':32768, 'max_num_seqs':8, 'gpu_memory_utilization':0.90,
            'max_images_per_prompt':32, 'vision_max_pixels':262144, 'mm_processor_cache_gb':1,

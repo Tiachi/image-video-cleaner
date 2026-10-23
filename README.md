@@ -1,6 +1,6 @@
 # Image Video Cleaner：图片/视频三步清洗管道
 
-只处理**图片和视频画面**，不处理声音。默认使用已有本机 **Qwen3.8-27B + vLLM**；模型名称与API均可配置。原始JSONL和媒体保持不变，每一步独立交付中间产物与统计，支持完整块续跑。
+只处理**图片和视频画面**，不处理声音。默认调用已有 **Qwen3.8-27B + vLLM**；本机或远程服务只需API地址和模型名。原始JSONL和媒体保持不变，每一步独立交付中间产物与统计，支持完整块续跑。
 
 当前状态：已实现并完成合成测试。没有指定真实输入，没有启动媒体扫描、模型或NPU；不把格式校验通过当作人工质量认证。
 
@@ -65,7 +65,7 @@ bash run.sh stage03 init-config /mnt/sfs/ltj/iv-stage03.local.json
 bash run.sh vllm init-config --config /mnt/sfs/ltj/iv-vllm.local.json
 ```
 
-填写输入、媒体根、输出、冻结模型revision、工具路径后，按步先pilot、审阅、再正式。第三步可先纯CPU预缓存：
+填写输入、媒体根、输出、API地址/模型名和工具路径后，按步先pilot、审阅、再正式；已有API的model_revision可保持null。第三步可先纯CPU预缓存：
 
 ```bash
 bash run.sh stage03 cache --config /mnt/sfs/ltj/iv-stage03.local.json
@@ -77,7 +77,16 @@ bash run.sh stage03 run --config /mnt/sfs/ltj/iv-stage03.local.json
 
 ## 模型接口与Prompt
 
-默认 `http://127.0.0.1:8018/v1/chat/completions`，served-model-name=`Qwen3.8-27B`。只连接显式本机HTTP，图像用PNG data URL，不将媒体路径交给服务读盘。
+在统一配置中，已有服务只填下面两项即可；不需要权重路径、模型版本号或本地vLLM环境：
+
+```json
+"api": {
+  "api_base": "http://你的IP:端口/v1",
+  "model": "qwen3.8-27b"
+}
+```
+
+程序直接调用`/v1/chat/completions`，支持HTTP/HTTPS和远程IP/主机名，不走环境代理。模型名区分大小写，按服务的served-model-name原样填写。第三步需要服务支持图片输入；PNG帧随请求发送，服务无需访问客户端媒体路径。完整配置和本地启动可选模式见[配置说明](docs/configuration.md)。
 
 | 阶段 | 模型输出 | 程序处理 |
 |---|---|---|

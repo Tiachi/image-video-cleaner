@@ -2,7 +2,7 @@
   "model_path": null,
   "model_revision": null,
   "runtime_root": null,
-  "served_model_name": "Qwen3.8-27B",
+  "served_model_name": "qwen3.8-27b",
   "port": 8018,
   "tensor_parallel_size": 2,
   "data_parallel_size": 8,

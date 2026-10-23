@@ -97,6 +97,7 @@ class UnifiedConfigTests(unittest.TestCase):
         self.assertNotEqual(first.parent,second.parent); self.assertEqual(first.read_bytes(),original)
 
     def test_child_commands_use_current_or_separate_model_python(self):
+        self.c['api']['service_mode']='managed'
         r=p.resolve(self.c); r['vllm_python']=sys.executable
         cmd=p.child_command(r,'stage03','cache',self.base/'one.json',100)
         self.assertEqual(cmd[-2:],['--rows','100']); self.assertIn('cache',cmd)
@@ -104,6 +105,35 @@ class UnifiedConfigTests(unittest.TestCase):
         self.assertEqual(Path(model_cmd[0]),Path(sys.executable))
         self.assertIn('vllm_service.py',model_cmd[3])
         with self.assertRaises(ValueError):p.child_command(r,'stage02','run',self.base/'one.json',100)
+
+    def test_existing_api_accepts_just_url_and_model_and_no_vllm_section(self):
+        self.c['api']={'api_base':'http://192.0.2.1:8123/v1','model':'qwen3.8-27b'}
+        del self.c['vllm']
+        r=p.resolve(self.c)
+        self.assertEqual(r['service_mode'],'existing')
+        for stage in ('stage02','stage03'):
+            self.assertEqual(r[stage]['model'],'qwen3.8-27b')
+            self.assertIsNone(r[stage]['model_revision'])
+            self.assertNotIn('service_mode',r[stage])
+        self.assertNotIn('model_revision',self.c['api'])
+        self.assertFalse((self.base/'work').exists())
+
+    def test_existing_mode_ignores_unused_local_model_path(self):
+        self.c['vllm']['model_path']='not a local path; existing server owns weights'
+        r=p.resolve(self.c)
+        self.assertIsNone(r['vllm']['model_path'])
+        for phase in ('print','serve'):
+            with self.assertRaisesRegex(ValueError,'existing API mode'):
+                p.child_command(r,'vllm',phase,self.base/'v.json')
+
+    def test_managed_launch_cannot_target_remote_or_https_service(self):
+        self.c['api']['service_mode']='managed'
+        for base in ('http://192.0.2.1:8018/v1','https://localhost:8018/v1'):
+            self.c['api']['api_base']=base
+            with self.assertRaisesRegex(ValueError,'managed service binds'):
+                p.child_command(p.resolve(self.c),'vllm','serve',self.base/'v.json')
+        self.c['api']['service_mode']='typo'
+        with self.assertRaises(ValueError):p.resolve(self.c)
 
     def test_show_cli_does_not_launch_or_create_stage_outputs(self):
         config=self.base/'pipeline.local.json'; config.write_text(json.dumps(self.c),encoding='utf-8')

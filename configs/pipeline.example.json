@@ -20,8 +20,9 @@
   },
   "api": {
     "api_base": "http://127.0.0.1:8018/v1",
-    "model": "Qwen3.8-27B",
-    "model_revision": null
+    "model": "qwen3.8-27b",
+    "model_revision": null,
+    "service_mode": "existing"
   },
   "stage01": {
     "workers": 4,

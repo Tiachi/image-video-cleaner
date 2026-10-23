@@ -265,9 +265,15 @@ class PipelineTests(unittest.TestCase):
         with self.assertRaises((ValueError,json.JSONDecodeError)): self.run_stage3(c)
         self.assertEqual(VisualJudge.payloads,[])
 
-    def test_config_refuses_cloud_and_overlapping_output(self):
+    def test_existing_visual_api_accepts_unknown_revision(self):
+        self.c3.update(api_base='http://192.0.2.1:8018/v1',model='qwen3.8-27b',model_revision=None)
+        c=self.prepare([row()])
+        self.assertIsNone(c['model_revision'])
+        self.assertEqual(self.run_stage3(c)['counts'],{'accepted':1})
+
+    def test_config_refuses_invalid_api_and_overlapping_output(self):
         self.prepare([row()]); p=self.base/'bad.json'
-        for changes in ({'api_base':'https://example.test/v1'}, {'output':str(self.base/'media/derived')},
+        for changes in ({'api_base':'https://example.test/not-v1'}, {'output':str(self.base/'media/derived')},
                         {'output':str(self.base/'stage02/full/new')}, {'frame_cache_root':str(self.base/'stage03/cache')},
                         {'minimum_score':True}):
             c=dict(self.c3,**changes); p.write_bytes(core.encoded(c))

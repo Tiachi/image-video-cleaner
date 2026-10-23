@@ -6,7 +6,7 @@
 
 建议新代码checkout：`/mnt/sfs/ltj/project/image-video-cleaner`，私有仓库`Tiachi/image-video-cleaner`；数据输出`/mnt/sfs/ltj/media_cleaning/<任务名>/`。原数据仍在原位置，只读。
 
-Python>=3.10；清洗端无pip依赖。FFmpeg/ffprobe须可用并带blurdetect；本项目不下载工具或模型。Qwen服务使用已有兼容vLLM-Ascend环境，配置你的本地权重路径与冻结revision。
+Python>=3.10；清洗端无pip依赖。FFmpeg/ffprobe须可用并带blurdetect；本项目不下载工具或模型。已有Qwen服务只需API地址与模型名；自行启动时才需要兼容vLLM-Ascend环境、本地权重路径与冻结revision。
 
 在干净checkout中同步，禁用个人代理；若fetch失败停止，不覆盖当前代码：
 
@@ -23,7 +23,7 @@ bash run.sh pipeline init-config /mnt/sfs/ltj/image-video.local.json
 bash run.sh pipeline show --config /mnt/sfs/ltj/image-video.local.json
 ```
 
-先编辑source/media_root/work_root、API/model_revision及本地权重/工具位置，再执行show。随后用`bash run.sh pipeline stage01|stage02|stage03 --config ... --phase pilot|run`；服务用`pipeline vllm --phase print|serve`。下面四份配置的操作是兼容旧入口，使用统一配置时不用执行。
+先编辑source/media_root/work_root及工具位置；已有服务的api段只填`api_base`和`model`，revision和本地权重无需填写。执行show后，用`bash run.sh pipeline stage01|stage02|stage03 --config ... --phase pilot|run`。只有自行启动服务时才设置`api.service_mode=managed`并补齐权重/运行环境，然后使用`pipeline vllm --phase print|serve`。下面四份配置是兼容旧入口，使用统一配置时不用执行。
 
 ```bash
 bash run.sh stage01 init-config /mnt/sfs/ltj/iv-stage01.local.json
@@ -37,8 +37,8 @@ init使用独占创建，不覆盖同名配置。填法：
 | 配置 | 必填/需审阅内容 |
 |---|---|
 | stage01 | source JSONL、media_root、allowed_media_roots、独立output、现有ffmpeg/ffprobe路径；用真实样本校准两个clarity阈值 |
-| stage02 | stage1_delivery指向Stage01正式full/delivery、独立output、served model/revision、API；默认质量阈值null |
-| stage03 | stage2_delivery指向Stage02正式full/delivery、独立output、独立frame_cache_root/容量、cache_namespace、工具路径、model/revision |
+| stage02 | stage1_delivery指向Stage01正式full/delivery、独立output、served model和API；revision可null；默认质量阈值null |
+| stage03 | stage2_delivery指向Stage02正式full/delivery、独立output、独立frame_cache_root/容量、cache_namespace、工具路径、model和API；revision可null |
 | vllm | model_path、model_revision、独立runtime_root；启动时记录config SHA和命令，不散列全权重 |
 
 source、media roots、output、scratch/cache之间禁止重叠，配置也不要写入代码目录。scratch_root若指定须为已存在的仓库外目录；SQLite仅在可丢弃scratch中，持久续跑靠parts而非数据库。
@@ -54,7 +54,7 @@ bash run.sh stage01 run --config /mnt/sfs/ltj/iv-stage01.local.json
 
 pilot是输入前100行，便于连通性/阈值检查，不代表随机质量抽样。blur阈值null时待复核是预期，不能把空通过集冒充全部数据已经清洗可用。
 
-另开终端启动已有环境里的服务，先检查将使用的命令：
+已有API跳过下列启动操作。需要本项目自行启动时，另开终端使用独立服务配置，先检查将使用的命令：
 
 ```bash
 bash run.sh vllm print --config /mnt/sfs/ltj/iv-vllm.local.json

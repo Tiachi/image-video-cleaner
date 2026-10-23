@@ -47,11 +47,25 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(issues_for(label, None), [])
         self.assertEqual(core.decision(issues_for(label, 7)), 'rejected')
 
-    def test_non_loopback_api_refused(self):
-        for value in ('https://api.example.test/v1', 'http://192.168.1.2/v1',
-                      'http://user:secret@localhost/v1', 'http://localhost/v1?secret=123'):
+    def test_remote_http_https_and_ipv6_are_supported(self):
+        for value, expected in (('https://api.example.test/v1', ('api.example.test',443)),
+                                ('http://192.168.1.2:8123/v1/', ('192.168.1.2',8123)),
+                                ('http://[::1]:8018/v1', ('::1',8018))):
+            self.assertEqual(s.api_location(value),expected)
+
+    def test_malformed_api_refused(self):
+        for value in ('http://user:secret@localhost/v1', 'http://localhost/v1?secret=123',
+                      'http://localhost/v1#frag','ftp://localhost/v1','http:///v1',
+                      'http://localhost:0/v1','http://localhost:65536/v1','http://localhost:abc/v1',
+                      'http://localhost/v1//','http://localhost/v1/chat/completions',
+                      'http://local\nhost/v1', 'http://localhost\\bad/v1', None):
             with self.assertRaises(ValueError):
                 s.api_location(value)
+
+    def test_unknown_model_revision_is_explicit(self):
+        self.assertEqual(s.model_identity({'model':'qwen3.8-27b','model_revision':None}), 'endpoint_alias_only')
+        for revision in ('',4,False):
+            with self.assertRaises(ValueError):s.model_identity({'model':'qwen3.8-27b','model_revision':revision})
 
 
 class FakeMedia:
@@ -105,6 +119,12 @@ class PipelineTests(unittest.TestCase):
         return core.run(c, self.base/'stage02/full', {'synthetic': True}, limit, FakeJudge,
                         {'synthetic': 'stage02'}, s.analyse, s.summary_builder(c), s.emit, s.write_attributes,
                         allow_empty=True)
+
+    def test_existing_api_needs_no_model_revision_or_local_runtime(self):
+        self.c.update(api_base='http://192.0.2.1:8018/v1',model='qwen3.8-27b',model_revision=None)
+        c=self.prepare([row()])
+        self.assertIsNone(c['model_revision'])
+        self.assertEqual(self.run_stage2(c)['counts'],{'accepted':1})
 
     def test_two_stage_lineage_outputs_and_no_metadata_in_model_payload(self):
         original = [row('Red.', 'a'), row('bad answer', 'b'), row('suitable', 'c')]

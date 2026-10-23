@@ -20,7 +20,7 @@ from text_contract import FIELDS, COT, LANGUAGES, parse, issues_for
 
 PROMPT = PROJECT/'prompts/text_qa_quality_v1.txt'
 DEFAULT = {'stage1_delivery': None, 'output': None, 'api_base': 'http://127.0.0.1:8018/v1',
-           'model': 'Qwen3.8-27B', 'model_revision': None, 'workers': 64, 'part_rows': 128,
+           'model': 'qwen3.8-27b', 'model_revision': None, 'workers': 64, 'part_rows': 128,
            'scratch_root': None, 'scratch_limit_mb': 8192, 'timeout_seconds': 120,
            'max_input_chars': 24000, 'minimum_score': None}
 
@@ -30,11 +30,23 @@ def emit(event, value):
 
 
 def api_location(base):
+    core.require(isinstance(base, str) and not any(ch.isspace() or ord(ch)<32 or ord(ch)==127
+                 for ch in base) and '\\' not in base, 'invalid API URL')
     p = urlparse(base)
-    core.require(p.scheme == 'http' and p.hostname in ('127.0.0.1', 'localhost', '::1')
-                 and not p.username and not p.password and not p.query and not p.fragment
-                 and p.path.rstrip('/') == '/v1', 'v1 only supports explicit local HTTP vLLM; no external API/proxy')
-    return p.hostname, p.port or 80
+    core.require(p.scheme in ('http', 'https') and p.hostname
+                 and p.username is None and p.password is None and not p.query and not p.fragment
+                 and p.path in ('/v1', '/v1/'), 'API must be http(s)://host[:port]/v1 without credentials/query/fragment')
+    port = p.port
+    core.require(port is None or 1 <= port <= 65535, 'invalid API port')
+    return p.hostname, port or (443 if p.scheme == 'https' else 80)
+
+
+def model_identity(c):
+    core.require(isinstance(c['model'], str) and c['model'].strip(), 'served model name required')
+    revision = c['model_revision']
+    core.require(revision is None or isinstance(revision, str) and revision.strip(),
+                 'model_revision must be null or a nonempty declaration')
+    return 'endpoint_alias_only' if revision is None else 'declared_revision_unverified'
 
 
 def config(path):
@@ -45,9 +57,7 @@ def config(path):
         core.require(isinstance(c[name], str) and Path(c[name]).is_absolute()
                      and core.outside_repo(c[name]), name+' needs external absolute path')
         c[name] = str(Path(c[name]).resolve())
-    core.require(isinstance(c['model'], str) and c['model'].strip(), 'served model name required')
-    core.require(isinstance(c['model_revision'], str) and c['model_revision'].strip(),
-                 'declare a frozen model revision/checksum; served alias alone cannot identify weights')
+    model_identity(c)
     api_location(c['api_base'])
     core.require(type(c['workers']) is int and 1 <= c['workers'] <= 512, 'workers must be1..512')
     core.require(type(c['part_rows']) is int and c['workers'] <= c['part_rows'] <= 4096,
@@ -130,7 +140,8 @@ class Judge:
     def request(self, payload):
         if not getattr(self.local, 'client', None):
             host, port = api_location(self.config['api_base'])
-            self.local.client = http.client.HTTPConnection(host, port, timeout=self.config['timeout_seconds'])
+            connection = http.client.HTTPSConnection if urlparse(self.config['api_base']).scheme == 'https' else http.client.HTTPConnection
+            self.local.client = connection(host, port, timeout=self.config['timeout_seconds'])
             with self.lock:
                 self.clients.append(self.local.client)
         client = self.local.client
@@ -312,6 +323,7 @@ def main():
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, timeout=10, text=True).strip()
     runtime = {'stage': 'text_qa_v1', 'api_base': c['api_base'], 'model': c['model'],
                'declared_model_revision': c['model_revision'], 'model_weights_verified': False,
+               'model_identity_status': model_identity(c),
                'prompt_sha256': core.digest_file(PROMPT), 'producer_commit': commit}
     files = [Path(__file__), Path(__file__).with_name('text_contract.py'), Path(core.__file__)]
     files += [Path(core.__file__).with_name('text_checks.py'), Path(core.__file__).with_name('media_checks.py')]

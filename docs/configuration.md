@@ -23,12 +23,24 @@ bash run.sh pipeline init-config /mnt/sfs/ltj/image-video.local.json
 | paths.vllm_runtime_root | vLLM日志、启动记录及运行缓存 | null则`work_root/vllm_runtime` |
 | paths.scratch_root | 可丢弃SQLite临时工作目录 | null使用系统临时目录；指定时须已存在 |
 | tools.python | 清洗阶段使用的Python | null沿用当前运行Python，不要求和模型环境一致 |
-| tools.vllm_python | vLLM环境Python入口 | null沿用tools.python/当前Python；可指定已有910C环境的解释器 |
+| tools.vllm_python | 自行启动服务时的vLLM环境Python | 已有API调用不使用；managed模式下可指定已有910C环境的解释器 |
 | tools.ffmpeg / ffprobe | 媒体工具入口 | 默认从PATH查找，可写现有可执行文件绝对路径 |
-| api.api_base | 模型API入口 | 默认`http://127.0.0.1:8018/v1`；当前实现只接受本机HTTP |
-| api.model | 服务模型名 | 默认Qwen3.8-27B，同时用于两阶段调用和服务的served-model-name |
-| api.model_revision | 冻结权重版本/校验身份 | 模型阶段/启动服务前须填写；只是声明，不等于自动散列全权重 |
-| vllm.model_path | 服务器既有权重目录 | 自行填写，不下载权重 |
+| api.api_base | 模型API入口 | `http://IP:端口/v1`，也支持HTTPS、主机名、IPv6；默认本机8018 |
+| api.model | 服务模型名 | 默认`qwen3.8-27b`，与服务的served-model-name完全一致，按原样发送 |
+| api.service_mode | existing或managed | 可省略，默认existing；只调用已有服务，不启动/停止模型 |
+| api.model_revision | 可选的冻结权重声明 | 已有API可省略/null；managed启动时必须填写；声明不等于验证权重 |
+| vllm.model_path | 自行启动服务时的既有权重目录 | existing模式不使用，整个vllm段可省略；不下载权重 |
+
+**已有服务只需两项API信息：**把统一配置的`api`段写为如下内容，其他数据路径和阶段规则按需填写：
+
+```json
+"api": {
+  "api_base": "http://你的IP:端口/v1",
+  "model": "qwen3.8-27b"
+}
+```
+
+无需提供模型目录、模型版本或本地vLLM解释器。第二步发送文本，第三步发送文本和PNG帧，均调用`/v1/chat/completions`。第三步要求已有服务开启视觉输入；本地仍需FFmpeg用于机械检测/视频抽帧。程序不继承HTTP代理、不自动重试；服务别名/远端权重未核实的状态如实写入runtime，详见[接口说明](qwen_vllm.md)。
 
 三个阶段的详细规则/并发在`stage01`、`stage02`、`stage03`中；服务TP/DP、图执行、prefix、并发在`vllm`中。`stage01.clarity`的两个阈值默认null，要先校准。质量阈值`stage02.minimum_score`与`stage03.minimum_score`各自独立，默认不按分数剔除。
 
@@ -59,18 +71,16 @@ work_root/
 
 `delivery`中的accepted/rejected/review/audit、逐QA属性、report/summary/receipt命名保持不变。各输出根可以分别覆盖，但不能相互嵌套或与原始输入、媒体/模型目录重叠；配置快照也不能写进这些原始目录或帧缓存。
 
-`stage03.max_images_per_request`自动决定vLLM的图片数上限，`stage03.vision_processor_kwargs.max_pixels`自动决定服务的vision_max_pixels；API URL端口自动决定服务端口，模型名和revision也只有一个配置源。避免改了调用端却忘记同步启动端。
+仅在managed启动时，`stage03.max_images_per_request`决定vLLM的图片数上限，`stage03.vision_processor_kwargs.max_pixels`决定服务vision_max_pixels；API URL决定服务端口、模型名和revision。existing模式不会修改远端服务的TP/DP、processor或图像上限，这些客户端值仅记录期望配置。
 
 ## 使用同一份配置执行
 
 ```bash
 bash run.sh pipeline stage01 --config /mnt/sfs/ltj/image-video.local.json --phase pilot --rows 100
 bash run.sh pipeline stage01 --config /mnt/sfs/ltj/image-video.local.json --phase run
-bash run.sh pipeline vllm --config /mnt/sfs/ltj/image-video.local.json --phase print
-bash run.sh pipeline vllm --config /mnt/sfs/ltj/image-video.local.json --phase serve
 ```
 
-服务在单独终端前台运行，确认就绪后依次执行：
+默认复用已有API，不执行服务启动命令。已有服务就绪后依次执行：
 
 ```bash
 bash run.sh pipeline stage02 --config /mnt/sfs/ltj/image-video.local.json --phase pilot --rows 100
@@ -80,7 +90,14 @@ bash run.sh pipeline stage03 --config /mnt/sfs/ltj/image-video.local.json --phas
 bash run.sh pipeline stage03 --config /mnt/sfs/ltj/image-video.local.json --phase run
 ```
 
-阶段命令不自动启动模型；vllm默认phase为print，清洗阶段默认pilot，避免省略phase就跑全量。`--rows`只支持pilot/cache的1~10000行；cache不加rows为第二步通过集全量预缓存。`frame_cache_mode=require_hit`时缺失不重解码，条件与旧入口一致。
+自行启动时才设置`api.service_mode=managed`，填写`vllm.model_path`、`api.model_revision`和适用的`tools.vllm_python`，API用本机HTTP地址，再执行：
+
+```bash
+bash run.sh pipeline vllm --config /mnt/sfs/ltj/image-video.local.json --phase print
+bash run.sh pipeline vllm --config /mnt/sfs/ltj/image-video.local.json --phase serve
+```
+
+服务在独立终端前台运行。阶段命令不自动启动模型；existing模式拒绝vllm启动命令；managed模式vllm默认phase为print，清洗阶段默认pilot。`--rows`只支持pilot/cache的1~10000行；cache不加rows为第二步通过集全量预缓存。`frame_cache_mode=require_hit`时缺失不重解码，条件与旧入口一致。
 
 ## 快照、修改与验证
 

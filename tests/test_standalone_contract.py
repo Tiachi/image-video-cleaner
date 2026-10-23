@@ -22,7 +22,7 @@ class ScopeTests(unittest.TestCase):
         with self.assertRaises(ValueError): media_checks.references({'audios':['one.mp4']})
 
     def test_qwen_alias_is_shared_by_both_judges_and_service(self):
-        self.assertEqual(text_qa_clean.DEFAULT['model'],'Qwen3.8-27B')
+        self.assertEqual(text_qa_clean.DEFAULT['model'],'qwen3.8-27b')
         self.assertEqual(media_qa_clean.DEFAULT['model'],service.DEFAULT['served_model_name'])
 
     def test_entrypoints_import_without_parent_dataset_checkout(self):
