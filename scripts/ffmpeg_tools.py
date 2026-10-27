@@ -11,6 +11,10 @@ import threading
 FILTER = ('blurdetect=low=0.078431372549:high=0.196078431373:'
           'radius=50:block_width=32:block_height=32:block_pct=100:planes=1')
 
+def label(mean, threshold):
+    """Threshold label for a measured mean blur; uncalibrated thresholds stay unknown."""
+    return None if threshold is None else mean > threshold
+
 def stat_id(path):
     value = Path(path).stat()
     return {'path': str(path), 'bytes': value.st_size, 'mtime_ns': value.st_mtime_ns}
