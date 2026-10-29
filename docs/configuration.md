@@ -44,6 +44,17 @@ bash run.sh pipeline init-config /mnt/sfs/ltj/image-video.local.json
 
 三个阶段的详细规则/并发在`stage01`、`stage02`、`stage03`中；服务TP/DP、图执行、prefix、并发在`vllm`中。`stage01.clarity`的两个阈值默认null，要先校准。质量阈值`stage02.minimum_score`与`stage03.minimum_score`各自独立，默认不按分数剔除。
 
+`stage01.text_v2`是新增文本规则块；旧统一配置缺少该块时自动补默认，但阶段identity会变化，旧产物不能当同任务续跑。默认值：
+
+| 字段 | 默认 | 作用 |
+|---|---|---|
+| datatrove_enabled / datatrove_ngram / datatrove_min_tokens / datatrove_threshold / datatrove_action | true / 8 / 128 / 0.6 / review | 对齐datatrove SFT配方的长文本n-gram复读 |
+| language_proxy | true | CJK/Latin/其他脚本代理，仅统计与分层 |
+| qa_structure | true | OE/MCQ/判断题、选项数、答案字母确定性检测 |
+| boilerplate_enabled / boilerplate_action | true / review | lorem ipsum、javascript、模板AI拒答 |
+
+Stage02默认Prompt为`prompts/text_qa_quality_v2.txt`，输出8个整数（原6项+QA类型+选项数）；旧v1结果保留但新任务使用新output。
+
 ```bash
 bash run.sh pipeline show --config /mnt/sfs/ltj/image-video.local.json
 ```

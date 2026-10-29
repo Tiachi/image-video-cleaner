@@ -71,11 +71,12 @@ def resolve(c):
         c['api'].setdefault('model_revision',None)
         c['api'].setdefault('service_mode','existing')
     if isinstance(c.get('stage03'),dict): c['stage03'].setdefault('vision_processor_mode','request')
+    if isinstance(c.get('stage01'),dict): c['stage01'].setdefault('text_v2',deepcopy(DEFAULT['stage01']['text_v2']))
     core.require(isinstance(c,dict) and set(c)==set(DEFAULT),'unified config keys differ from template')
     core.require(type(c['schema_version']) is int and c['schema_version']==1,'unsupported schema_version')
     for key in ('paths','tools','api','stage01','stage02','stage03','vllm'):
         core.require(isinstance(c[key],dict) and set(c[key])==set(DEFAULT[key]),'invalid '+key+' keys')
-    for section,key in (('stage01','clarity'),('stage01','text'),('stage03','vision_processor_kwargs')):
+    for section,key in (('stage01','clarity'),('stage01','text'),('stage01','text_v2'),('stage03','vision_processor_kwargs')):
         core.require(isinstance(c[section][key],dict) and set(c[section][key])==set(DEFAULT[section][key]),
                      'invalid '+section+'.'+key+' keys')
     paths=c['paths']; work=absolute(paths['work_root'],'paths.work_root')

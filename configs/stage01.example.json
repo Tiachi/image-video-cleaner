@@ -1,25 +1,36 @@
 {
-  "source": null,
-  "media_root": null,
   "allowed_media_roots": [],
-  "output": null,
-  "workers": 4,
-  "part_rows": 128,
-  "timeout_seconds": 30,
-  "scratch_root": null,
-  "scratch_limit_mb": 8192,
+  "clarity": {
+    "action": "review",
+    "image_threshold": null,
+    "video_threshold": null
+  },
+  "exact_duplicate": true,
   "ffmpeg": "ffmpeg",
   "ffprobe": "ffprobe",
-  "clarity": {
-    "image_threshold": null,
-    "video_threshold": null,
-    "action": "review"
-  },
+  "media_root": null,
+  "output": null,
+  "part_rows": 128,
+  "scratch_limit_mb": 8192,
+  "scratch_root": null,
+  "source": null,
   "text": {
-    "ngram": 4,
+    "action": "review",
     "min_tokens": 32,
-    "threshold": 0.6,
-    "action": "review"
+    "ngram": 4,
+    "threshold": 0.6
   },
-  "exact_duplicate": true
+  "text_v2": {
+    "boilerplate_action": "review",
+    "boilerplate_enabled": true,
+    "datatrove_action": "review",
+    "datatrove_enabled": true,
+    "datatrove_min_tokens": 128,
+    "datatrove_ngram": 8,
+    "datatrove_threshold": 0.6,
+    "language_proxy": true,
+    "qa_structure": true
+  },
+  "timeout_seconds": 30,
+  "workers": 4
 }

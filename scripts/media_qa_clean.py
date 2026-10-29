@@ -277,7 +277,8 @@ def write_attributes(stage, parts, summary):
                             'label_status':qa['status'], 'media_labels':qa.get('labels'), 'evidence':qa.get('evidence',[]),
                             'frame_transport':qa.get('frame_transport'),
                             'requested_vision_processor_kwargs':qa.get('requested_vision_processor_kwargs'),
-                            'text_labels':previous['labels'], 'cot_candidate':a['status']=='accepted' and previous['labels']['cot_class']==2})
+                            'text_labels':previous['labels'], 'qa_structure':previous.get('qa_structure'),
+                            'cot_candidate':a['status']=='accepted' and previous['labels']['cot_class']==2})
                         out.write(data); h.update(data); size += len(data)
         out.flush(); text_stage.os.fsync(out.fileno())
     return {name:{'sha256':h.hexdigest(), 'bytes':size}}

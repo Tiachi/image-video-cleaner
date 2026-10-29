@@ -10,42 +10,100 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'scripts'))
 import text_qa_clean as s
 from text_contract import parse, issues_for
+from qa_structure import detect as detect_structure
 core = s.core
 
 
 class ContractTests(unittest.TestCase):
     def test_all_three_cot_classes(self):
         for value in (0, 1, 2):
-            self.assertEqual(parse('8,1,0,0,%d,2' % value)['cot_class'], value)
+            self.assertEqual(parse('8,1,0,0,%d,2,0,0' % value)['cot_class'], value)
 
     def test_unknown_is_not_fourth_cot_class(self):
-        label = parse('8,1,0,0,9,0')
+        label = parse('8,1,0,0,9,0,0,0')
         self.assertIsNone(label['cot_class'])
         self.assertEqual(core.decision(issues_for(label, None)), 'review')
 
     def test_quality_score_limits_and_format(self):
-        for value in ('0,1,0,0,1,2', '11,1,0,0,1,2', '8,1,0,0,3,2',
-                      '8,1,0,0,1,5', '8,1,0,0,1', '8,1,0,0,1,2 explanation',
-                      '{"score":8}', '8,1,0,0,1,2,3'):
+        for value in ('0,1,0,0,1,2,0,0', '11,1,0,0,1,2,0,0', '8,1,0,0,3,2,0,0',
+                      '8,1,0,0,1,5,0,0', '8,1,0,0,1,2', '8,1,0,0,1,2 explanation',
+                      '{"score":8}', '8,1,0,0,1,2,3', '8,1,0,0,1,2,0,0,0',
+                      '8,1,0,0,1,2,4,0', '8,1,0,0,1,2,0,11'):
             with self.assertRaises(ValueError):
                 parse(value)
-        self.assertEqual(parse(' 8, 1, 0, 0, 1, 2 ')['quality_score'], 8)
+        self.assertEqual(parse(' 8, 1, 0, 0, 1, 2, 0, 0 ')['quality_score'], 8)
 
     def test_reasonable_refusal_not_auto_rejected(self):
-        self.assertEqual(issues_for(parse('9,1,2,0,1,1'), 8), [])
+        self.assertEqual(issues_for(parse('9,1,2,0,1,1,0,0'), 8), [])
 
     def test_invalid_refusal_and_obvious_error_reject(self):
-        self.assertEqual(core.decision(issues_for(parse('3,0,1,0,1,1'), None)), 'rejected')
-        self.assertEqual(core.decision(issues_for(parse('3,1,0,1,2,1'), None)), 'rejected')
+        self.assertEqual(core.decision(issues_for(parse('3,0,1,0,1,1,0,0'), None)), 'rejected')
+        self.assertEqual(core.decision(issues_for(parse('3,1,0,1,2,1,0,0'), None)), 'rejected')
 
     def test_contradictory_high_score_reviews(self):
-        result = issues_for(parse('9,1,0,1,2,1'), 8)
+        result = issues_for(parse('9,1,0,1,2,1,0,0'), 8)
         self.assertEqual(result, [{'reason': 'model_label_contradiction', 'action': 'review'}])
 
     def test_quality_threshold_is_explicit(self):
-        label = parse('6,1,0,0,1,2')
+        label = parse('6,1,0,0,1,2,0,0')
         self.assertEqual(issues_for(label, None), [])
         self.assertEqual(core.decision(issues_for(label, 7)), 'rejected')
+
+    def test_qa_type_and_option_count_contract(self):
+        label = parse('9,1,0,0,1,1,1,4')
+        self.assertEqual(label['qa_type'], 1)
+        self.assertEqual(label['qa_type_name'], 'mcq')
+        self.assertEqual(label['option_count'], 4)
+        for value in ('9,1,0,0,1,1,4,4', '9,1,0,0,1,1,1,11'):
+            with self.assertRaises(ValueError):
+                parse(value)
+
+    def test_qa_structure_cross_check_and_answer_letter(self):
+        question = 'Which option is shown?\nA. cat\nB. dog\nC. bird\nD. fish'
+        structure = detect_structure(question, 'B')
+        self.assertEqual((structure['qa_type'], structure['option_count']), (1, 4))
+        self.assertEqual(issues_for(parse('9,1,0,0,1,2,1,4'), None, structure), [])
+        mismatch = issues_for(parse('9,1,0,0,1,2,0,0'), None, structure)
+        self.assertIn('qa_type_mismatch', [issue['reason'] for issue in mismatch])
+        bad = issues_for(parse('9,1,0,0,1,2,1,4'), None, detect_structure(question, 'E'))
+        self.assertIn('answer_letter_out_of_range', [issue['reason'] for issue in bad])
+        self.assertEqual(core.decision(bad), 'rejected')
+
+    def test_qa_type_option_consistency(self):
+        for text, reason in (('9,1,0,0,1,2,1,1', 'mcq_option_count_invalid'),
+                             ('9,1,0,0,1,2,0,4', 'oe_option_count_invalid'),
+                             ('9,1,0,0,1,2,2,4', 'tf_option_count_invalid'),
+                             ('9,1,0,0,1,2,3,4', 'unknown_type_option_count_invalid')):
+            self.assertIn(reason, [issue['reason'] for issue in issues_for(parse(text), None)])
+        self.assertEqual(issues_for(parse('9,1,0,0,1,2,2,2'), None), [])
+        self.assertEqual(issues_for(parse('9,1,0,0,1,2,1,2'), None), [])
+
+    def test_question_structure_false_positives(self):
+        self.assertEqual(detect_structure(
+            'Spider Solitaire is played with eight decks of 13 spade cards each.', '50')['qa_type'], 0)
+        self.assertEqual(detect_structure(
+            'The area of the shaded part 1 is smaller than part 2.', '18.5')['qa_type'], 0)
+        self.assertEqual(detect_structure(
+            'The area of the shaded part \u2460 is smaller than \u2461.', '18.5')['qa_type'], 0)
+        yesno = detect_structure('Does this meme carry a negative message?', 'No.')
+        self.assertEqual((yesno['qa_type'], yesno['option_count']), (2, 2))
+        self.assertEqual(detect_structure('Can you tell the time on the wall clock?', '3:00')['qa_type'], 0)
+        self.assertEqual(detect_structure(
+            'Are there any other things that have the same material?', 'a box')['qa_type'], 0)
+        binary = detect_structure('Is the number even or odd?\nA. even\nB. odd', 'A')
+        self.assertEqual((binary['qa_type'], binary['option_count']), (1, 2))
+
+    def test_unlabeled_last_option_reviews_not_rejects(self):
+        question = 'Which is true?\nA. one\nB. two\nC. three\nfourth line'
+        structure = detect_structure(question, 'D')
+        self.assertEqual((structure['qa_type'], structure['option_count']), (1, 4))
+        self.assertIn('option_labeling_incomplete', [x['reason'] for x in structure['issues']])
+        issues = issues_for(parse('9,1,0,0,1,2,1,4'), None, structure)
+        self.assertIn('option_labeling_incomplete', [x['reason'] for x in issues])
+        self.assertEqual(core.decision(issues), 'review')
+        out_of_range = issues_for(parse('9,1,0,0,1,2,1,4'), None,
+                                  detect_structure(question, 'E'))
+        self.assertEqual(core.decision(out_of_range), 'rejected')
 
     def test_remote_http_https_and_ipv6_are_supported(self):
         for value, expected in (('https://api.example.test/v1', ('api.example.test',443)),
@@ -78,11 +136,11 @@ class FakeJudge(s.Judge):
     payloads = []
     def request(self, payload):
         value = json.loads(payload); self.payloads.append(value)
-        if value['answer'] == 'bad answer': return '3,0,0,0,1,2', {'prompt_tokens': 10, 'completion_tokens': 11}
+        if value['answer'] == 'bad answer': return '3,0,0,0,1,2,0,0', {'prompt_tokens': 10, 'completion_tokens': 11}
         if value['answer'] == 'protocol error': return 'bad response', {}
-        if value['answer'] == 'suitable': return '8,1,0,0,2,1', {'prompt_tokens': 10, 'completion_tokens': 11}
-        if value['answer'] == 'has reasoning': return '9,1,0,0,0,1', {}
-        return '8,1,0,0,1,2', {'prompt_tokens': 10, 'completion_tokens': 11}
+        if value['answer'] == 'suitable': return '8,1,0,0,2,1,0,0', {'prompt_tokens': 10, 'completion_tokens': 11}
+        if value['answer'] == 'has reasoning': return '9,1,0,0,0,1,0,0', {}
+        return '8,1,0,0,1,2,0,0', {'prompt_tokens': 10, 'completion_tokens': 11}
 
 
 def row(answer='Red.', ident='one', extra=False):

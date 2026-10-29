@@ -32,6 +32,12 @@ DEFAULT = {
     'ffmpeg': 'ffmpeg', 'ffprobe': 'ffprobe',
     'clarity': {'image_threshold': None, 'video_threshold': None, 'action': 'review'},
     'text': {'ngram': 4, 'min_tokens': 32, 'threshold': .6, 'action': 'review'},
+    'text_v2': {
+        'datatrove_enabled': True, 'datatrove_ngram': 8, 'datatrove_min_tokens': 128,
+        'datatrove_threshold': .6, 'datatrove_action': 'review',
+        'language_proxy': True, 'qa_structure': True,
+        'boilerplate_enabled': True, 'boilerplate_action': 'review',
+    },
     'exact_duplicate': True,
 }
 
@@ -75,8 +81,10 @@ def outside_repo(path):
 def read_config(path):
     require(Path(path).stat().st_size <= 128*1024, 'config too large')
     c = json.loads(Path(path).read_text(encoding='utf-8'))
-    require(isinstance(c, dict) and set(c) == set(DEFAULT), 'config keys differ from template')
-    for k in ('clarity', 'text'):
+    require(isinstance(c, dict), 'config must be object')
+    c.setdefault('text_v2', json.loads(json.dumps(DEFAULT['text_v2'])))
+    require(set(c) == set(DEFAULT), 'config keys differ from template')
+    for k in ('clarity', 'text', 'text_v2'):
         require(isinstance(c[k], dict) and set(c[k]) == set(DEFAULT[k]), 'invalid '+k+' keys')
     for k in ('source', 'media_root', 'output'):
         require(isinstance(c[k], str) and Path(c[k]).is_absolute(), k+' must be explicit absolute path')
@@ -117,6 +125,18 @@ def read_config(path):
     require(type(t['threshold']) in (int, float) and math.isfinite(t['threshold'])
             and 0 < t['threshold'] <= 1, 'invalid repetition threshold')
     require(all(isinstance(c[k], str) and c[k] for k in ('ffmpeg', 'ffprobe')), 'tool paths required')
+    v2 = c['text_v2']
+    for key in ('datatrove_enabled', 'language_proxy', 'qa_structure', 'boilerplate_enabled'):
+        require(type(v2[key]) is bool, key+' must be boolean')
+    require(type(v2['datatrove_ngram']) is int and 2 <= v2['datatrove_ngram'] <= 32,
+            'datatrove_ngram must be2..32')
+    require(type(v2['datatrove_min_tokens']) is int
+            and v2['datatrove_ngram'] <= v2['datatrove_min_tokens'] <= 10000,
+            'invalid datatrove_min_tokens')
+    require(type(v2['datatrove_threshold']) in (int, float) and math.isfinite(v2['datatrove_threshold'])
+            and 0 < v2['datatrove_threshold'] <= 1, 'invalid datatrove_threshold')
+    require(v2['datatrove_action'] in ('review', 'reject')
+            and v2['boilerplate_action'] in ('review', 'reject'), 'invalid text_v2 actions')
     return c
 
 
@@ -160,7 +180,7 @@ def analyse(item, config, inspector):
     try:
         pairs = extract_pairs(row)
         audit['qa_pairs'] = len(pairs)
-        issues, metrics = check_pairs(pairs, config['text'])
+        issues, metrics = check_pairs(pairs, config['text'], config.get('text_v2'))
         audit['issues'].extend(issues); audit['text_metrics'] = metrics
     except ValueError as exc:
         audit['issues'].append({'reason': 'unsupported_qa_structure', 'action': 'review', 'error': str(exc)})
@@ -235,6 +255,7 @@ def run(config, root, runtime, limit=None, inspector_class=Inspector, code_ident
     identity = {'config': config, 'source_stat': initial, 'runtime': runtime, 'limit': limit,
                 'code': code_identity or {p.name: digest_file(p) for p in
                     (Path(__file__), Path(__file__).with_name('text_checks.py'),
+                     Path(__file__).with_name('qa_structure.py'),
                      Path(__file__).with_name('media_checks.py'), Path(blur.__file__))}}
     with writer_lock(root):
         identity_path = root/'identity.json'
@@ -418,6 +439,43 @@ def publish(root, parts, summary, artifact_writer=None):
     os.rename(stage, root/'delivery')
 
 
+def stage01_summary_builder(c):
+    def build(summary, parts):
+        fields = ('language_proxy', 'qa_type', 'option_count')
+        totals = {key: Counter() for key in fields}
+        passed = {key: Counter() for key in fields}
+        for part in sorted(parts.glob('part-*')):
+            with (part/'audit.jsonl').open('rb') as stream:
+                for raw in stream:
+                    audit = json.loads(raw)
+                    for item in audit.get('text_metrics') or []:
+                        values = {}
+                        if 'language_proxy' in item:
+                            values['language_proxy'] = item['language_proxy']
+                        structure = item.get('qa_structure')
+                        if structure:
+                            values['qa_type'] = str(structure['qa_type'])
+                            values['option_count'] = str(structure['option_count'])
+                        for key, value in values.items():
+                            totals[key][value] += 1
+                            if audit['status'] == 'accepted':
+                                passed[key][value] += 1
+        summary.update(
+            qa_distributions={key: dict(value) for key, value in totals.items()},
+            accepted_qa_distributions={key: dict(value) for key, value in passed.items()},
+            qa_display_names={'language_proxy': '语言代理', 'qa_type': 'QA类型',
+                              'option_count': '选项数'},
+            qa_value_names={
+                'language_proxy': {'zh_or_mixed': '中文或混合', 'latin_script': '拉丁字母',
+                                   'other_or_short': '其他/过短'},
+                'qa_type': {'0': '开放题OE', '1': '选择题MCQ', '2': '判断题TF', '3': '未定'},
+                'option_count': {'0': '0/未定', '2': '2（判断）', '3': '3', '4': '4', '5': '5',
+                                 '6': '6', '7': '7', '8': '8', '9': '9', '10': '10'}},
+            label_legend={'qa_type': {0: 'open_ended', 1: 'mcq', 2: 'true_false', 3: 'unknown'}})
+        return summary
+    return build
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
@@ -448,7 +506,7 @@ def main():
                    'model_calls': 0, 'media_writes': 0, 'workers': c['workers'],
                    'video_frames_per_clip': 8, 'producer_commit': commit})
     root = Path(c['output'])/('pilot-%d' % limit if limit else 'full')
-    run(c, root, runtime, limit)
+    run(c, root, runtime, limit, summary_builder=stage01_summary_builder(c))
 
 
 if __name__ == '__main__':

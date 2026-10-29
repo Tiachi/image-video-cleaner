@@ -117,6 +117,9 @@ PASS只能按具体阶段解释：程序执行/回执校验/统计守恒通过�
 | 媒体不存在/零字节 | exact annotation-derived路径检查 | reject |
 | IO/解码/结构问题 | 有界探测；不猜修复 | review |
 | 文本内部复读 | NFKC/casefold；英文按词、汉字按字的4-gram，至少32 token，重复比例≥0.6 | review；不是全库近重复去重 |
+| datatrove长文本复读 | 8-gram，至少128 token，重复比例≥0.6（对齐`Tiachi/datatrove` SFT配方） | review |
+| 语言代理 | CJK/Latin/other/过短；不单独作为剔除依据 | 写入audit与统计，供分层与Stage02对照 |
+| QA结构检测 | 确定性解析OE/MCQ/判断题、选项数、答案字母、重复选项、缺选项 | 结构问题review；答案字母越界reject；与Stage02模型标签交叉校验 |
 | 精确重复 | 规范QA、规范媒体/切片及其余上下文，忽略顶层id，保留首次 | 后续精确重复reject；同模板不同媒体不算重复 |
 | 清晰度 | FFmpeg blurdetect，图片第一帧，视频实际切片8帧均值 | mean_blur大于校准阈值时按配置review/reject |
 
@@ -132,7 +135,7 @@ Stage01仅缓存blur测量数值，不保存PNG帧。Stage03首次抽帧不是�
 
 模型看到当前问题、参考答案、此前QA及同一题的显式`cot/reasoning_process/rationale`。这些是待审内容，不是指令或已核验真值。不发送原ID、媒体路径、图片、第一步分数或后续答案。显式CoT若无法与多QA对应，进入待复核，不猜对应关系。
 
-只返回英文逗号连接的6个整数，如`8,1,0,0,1,2`：
+权威Prompt：[text_qa_quality_v2.txt](../prompts/text_qa_quality_v2.txt)（v1保留）。只返回英文逗号连接的8个整数，如`9,1,0,0,1,2,1,4`：
 
 | 顺序 | 属性 | 编码 |
 |---|---|---|
@@ -142,8 +145,12 @@ Stage01仅缓存blur测量数值，不保存PNG帧。Stage03首次抽帧不是�
 | 4 | obvious_error | 0未发现文本可证明错误、1明确核心错误、2未定；0不是画面事实已验证 |
 | 5 | cot_class | **0已有有效CoT、1没有且不适合补、2没有且适合补**；9未定→null |
 | 6 | language | 1中文、2英文、3其他、4混合、0未知 |
+| 7 | qa_type | 0开放题OE、1选择题MCQ、2判断题TF、3未定 |
+| 8 | option_count | OE/未定=0；判断题=2；选择题=2~10（2为二选一）；选择题但0或越界→review |
 
-分流规则：明确QA不匹配、无效拒答、文本可证明错误剔除；出现这些坏标签却同时给>4分，标签矛盾进入review。未知/协议错误/服务失败/超长文本review；显式minimum_score才按质量分剔除。不是依赖not/无法/没有等关键词一刀切拒答。
+Stage01/Stage02各自用确定性规则解析题目结构；模型标签与检测不一致（OE/MCQ/TF、选项数、答案字母越界、缺选项、重复选项）进入review，答案字母不在选项内可reject。检测结果不发给模型，避免锚定。
+
+分流规则：明确QA不匹配、无效拒答、文本可证明错误剔除；出现这些坏标签却同时给>4分，标签矛盾进入review。未知/协议错误/服务失败/超长文本review；显式minimum_score才按质量分剔除。不是依赖not/无法/没有等关键词一刀切拒答。跨样例目前仍是精确去重；上游datatrove MinHash近似去重未启用（性能待实测）。
 
 CoT0必须是相关、连贯、文本层面可用的推导/解释，空think标签不算；CoT1包括直接识别/OCR/简单事实类；CoT2强调多步计算、比较整合或因果推断，**不意味着当前数据有足够证据自动补写**。当前项目绝不生成、拼接或训练额外CoT。
 
@@ -251,7 +258,7 @@ work_root/
   vllm_runtime/                     # 可选managed服务
 ```
 
-`pilot-100`是前100行，不是随机样本；正式run从完整输入开始。Stage02属性含stage1_accepted_row、original_source_row、source_row_sha256、qa_index、row_status、label_status、labels、cot_candidate。Stage03使用stage2_accepted_row，并保留text_labels、media_labels和evidence。字段详见两个write_attributes实现，不能丢掉row_status后直接当作训练标签。
+`pilot-100`是前100行，不是随机样本；正式run从完整输入开始。Stage02属性含stage1_accepted_row、original_source_row、source_row_sha256、qa_index、row_status、label_status、labels（8字段）、qa_structure（确定性检测）、cot_candidate。Stage03使用stage2_accepted_row，并保留text_labels、media_labels和evidence。字段详见两个write_attributes实现，不能丢掉row_status后直接当作训练标签。
 
 统计区分行与QA、全体合法模型结果与通过集、原因可重叠计数、语言/CoT/分数/匹配、模型失败/token，以及父阶段量和累计保留率。Stage03缓存观察跨恢复块累计，不能误读成此次新增文件数或实测吞吐。
 

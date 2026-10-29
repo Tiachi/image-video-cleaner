@@ -214,6 +214,9 @@ class PipelineTests(unittest.TestCase):
         attrs = [json.loads(raw) for raw in (delivery/'attributes.jsonl').read_bytes().splitlines()]
         self.assertEqual([a['original_source_row'] for a in attrs],[2,3,4])
         self.assertEqual(attrs[0]['text_labels']['cot_class'],2); self.assertTrue(attrs[0]['cot_candidate'])
+        self.assertEqual(attrs[0]['text_labels']['qa_type'],0)
+        self.assertEqual(attrs[0]['text_labels']['option_count'],0)
+        self.assertEqual(attrs[0]['qa_structure']['qa_type'],0)
         self.assertEqual(attrs[0]['evidence'][0]['relative_pts_sec'],4)
         self.assertNotIn('private/media',json.dumps(VisualJudge.payloads))
         self.assertNotIn('text_labels',json.dumps(VisualJudge.payloads))

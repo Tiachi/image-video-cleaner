@@ -14,7 +14,8 @@ SCRIPTS = Path(__file__).resolve().parents[1]/'scripts'
 sys.path.insert(0, str(SCRIPTS))
 import mechanical_clean as m
 import media_checks as media
-from text_checks import repetition, extract_pairs, check_pairs
+from text_checks import (repetition, extract_pairs, check_pairs, datatrove_repetition,
+                         language_proxy)
 
 
 class FakeInspector:
@@ -95,6 +96,38 @@ class TextTests(unittest.TestCase):
         issues, metrics = check_pairs([('q', 'a'*262145)], m.DEFAULT['text'])
         self.assertEqual(issues[0]['reason'], 'answer_too_large_for_ngram')
         self.assertEqual(metrics[0]['answer']['status'], 'not_computed')
+
+    def test_datatrove_repetition_rule(self):
+        self.assertTrue(datatrove_repetition('中文文字'*100, 8, 128, .6)['flagged'])
+        self.assertFalse(datatrove_repetition('短答案', 8, 128, .6)['flagged'])
+        self.assertFalse(datatrove_repetition(' '.join('word%d' % i for i in range(80)),
+                                              8, 128, .6)['flagged'])
+
+    def test_language_proxy(self):
+        self.assertEqual(language_proxy('这是中文'), 'zh_or_mixed')
+        self.assertEqual(language_proxy('hello world'), 'latin_script')
+        self.assertEqual(language_proxy('12345'), 'other_or_short')
+
+    def test_qa_structure_cross_checks(self):
+        question = '以下哪项正确？\nA. 甲\nB. 乙\nC. 丙\nD. 丁'
+        issues, metrics = check_pairs([(question, 'B')], m.DEFAULT['text'],
+                                      m.DEFAULT['text_v2'])
+        self.assertEqual(m.decision(issues), 'accepted')
+        self.assertEqual(metrics[0]['qa_structure']['qa_type'], 1)
+        self.assertEqual(metrics[0]['qa_structure']['option_count'], 4)
+        issues, _ = check_pairs([('下列哪项正确？', 'A')], m.DEFAULT['text'],
+                                m.DEFAULT['text_v2'])
+        self.assertIn('mcq_options_missing', {x['reason'] for x in issues})
+        self.assertEqual(m.decision(issues), 'review')
+        issues, _ = check_pairs([(question, 'E')], m.DEFAULT['text'],
+                                m.DEFAULT['text_v2'])
+        self.assertIn('answer_letter_out_of_range', {x['reason'] for x in issues})
+        self.assertEqual(m.decision(issues), 'rejected')
+
+    def test_boilerplate_template_refusal_reviews(self):
+        issues, _ = check_pairs([('What is shown?', 'As an AI I cannot see the image.')],
+                                m.DEFAULT['text'], m.DEFAULT['text_v2'])
+        self.assertIn('template_ai_refusal', {x['reason'] for x in issues})
 
 
 class MediaTests(Fixture):

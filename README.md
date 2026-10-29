@@ -10,8 +10,8 @@
 
 | 阶段 | 处理内容 | 独立产物 |
 |---|---|---|
-| 1. 机械清洗 | 媒体存在/零字节、FFmpeg清晰度、问题与答案内部n-gram复读、空问题/答案、保守精确重复 | 通过/剔除/待复核JSONL、媒体测量、审计与统计 |
-| 2. 纯文本QA质量 | QA匹配、无效/合理拒答、文本可证明错误、1~10分、CoT0/1/2、语言 | 逐QA六项属性、质量分布、模型状态/token与阶段保留量 |
+| 1. 机械清洗 | 媒体存在/零字节、FFmpeg清晰度、问题与答案内部n-gram复读、datatrove 8-gram长文本复读、空问题/答案、保守精确重复、语言代理、OE/MCQ/判断题与选项检测 | 通过/剔除/待复核JSONL、媒体测量、审计与统计 |
+| 2. 纯文本QA质量 | QA匹配、无效/合理拒答、文本可证明错误、1~10分、CoT0/1/2、语言、OE/MCQ/判断题与选项数 | 逐QA八项属性、质量/类型/选项分布、模型状态/token与阶段保留量 |
 | 3. 带媒体QA质量 | 图片/实际视频切片抽帧、帧缓存、画面与QA匹配、媒体质量1~10分、证据帧 | 逐QA媒体分数/匹配/帧时间戳、沿用第二步标签、缓存及筛选统计 |
 
 第二步只消费第一步正式通过集，第三步只消费第二步正式通过集。源行按**字节原样**保留，任一QA明确不合格则整行剔除，任一QA不确定则整行待复核；不拆多轮对话破坏上下文。原始额外字段保留但不自动作为媒体输入，不推断仅在其他字段出现的MP4。支持的输入结构及边界见[三步合同](docs/pipeline_contract.md)。
@@ -96,12 +96,12 @@ bash run.sh stage03 run --config /mnt/sfs/ltj/iv-stage03.local.json
 
 | 阶段 | 模型输出 | 程序处理 |
 |---|---|---|
-| 2 | `质量分,QA匹配,拒答类型,明显错误,CoT类别,语言` | 严格解析六个整数，生成属性/统计 |
+| 2 | `质量分,QA匹配,拒答类型,明显错误,CoT类别,语言,QA类型,选项数` | 严格解析八个整数，生成属性/统计；QA类型0=OE/1=MCQ/2=TF/3=未定，选项数OE/未定=0、TF=2、MCQ=2~10 |
 | 3 | `质量分,媒体匹配,证据帧1,证据帧2` | 严格解析四个整数，核验帧编号并保存证据 |
 
 CoT：0已有有效CoT；1无且不适合补充；2无且适合补充；无法判断则模型哨兵9转null待复核。**不生成CoT。**
 
-完整Prompt：[纯文本](prompts/text_qa_quality_v1.txt)、[带媒体](prompts/media_qa_quality_v1.txt)。设计想法是先用便宜规则/文本过滤明显问题，最后为剩余QA花视觉推理成本；短数字输出节省生成，帧缓存节省重复解码。prefix caching、processor cache与磁盘帧缓存是不同层，收益必须分别实测。
+完整Prompt：[纯文本v2（默认）](prompts/text_qa_quality_v2.txt)、[纯文本v1](prompts/text_qa_quality_v1.txt)、[带媒体](prompts/media_qa_quality_v1.txt)。设计想法是先用便宜规则/文本过滤明显问题，最后为剩余QA花视觉推理成本；短数字输出节省生成，帧缓存节省重复解码。prefix caching、processor cache与磁盘帧缓存是不同层，收益必须分别实测。
 
 16卡vLLM暂定TP2/DP8、prefix caching、chunked prefill、async scheduling、decode graph；视觉阶段从每DP rank8序列起步。输入是多张图片，不用language-model-only。服务参数与限制见[Qwen vLLM说明](docs/qwen_vllm.md)。
 

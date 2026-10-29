@@ -30,6 +30,11 @@ class UnifiedConfigTests(unittest.TestCase):
                               ('stage03',p.media_stage.DEFAULT),('vllm',p.service.DEFAULT)):
             self.assertEqual(set(r[stage]),set(default))
 
+    def test_old_config_without_text_v2_gets_new_defaults(self):
+        c=deepcopy(self.c); del c['stage01']['text_v2']
+        r=p.resolve(c)
+        self.assertEqual(r['stage01']['text_v2'],p.DEFAULT['stage01']['text_v2'])
+
     def test_explicit_paths_control_downstream_inputs_and_cache(self):
         self.c['paths'].update(stage01_output=str(self.base/'custom-one'),stage02_output=str(self.base/'custom-two'),
                                stage03_output=str(self.base/'custom-three'),frame_cache_root=str(self.base/'frames'),

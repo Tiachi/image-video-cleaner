@@ -30,7 +30,7 @@ class TransportTests(unittest.TestCase):
             def do_POST(self):
                 body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 received.append((self.path,body,self.headers.get('Authorization')))
-                data=json.dumps({'choices':[{'message':{'content':'8,1,0,0,1,2'}}],
+                data=json.dumps({'choices':[{'message':{'content':'8,1,0,0,1,2,0,0'}}],
                                  'usage':{'completion_tokens':11}}).encode()
                 self.send_response(200); self.send_header('Content-Length',str(len(data)))
                 self.end_headers(); self.wfile.write(data)
@@ -46,7 +46,7 @@ class TransportTests(unittest.TestCase):
                                                   {'type':'image_url','image_url':{'url':'data:image/png;base64,AA=='}}])):
                     judge=self.judge(cls,base,'qwen3.8-27b')
                     answer,usage=judge.request(payload)
-                    self.assertEqual(answer,'8,1,0,0,1,2')
+                    self.assertEqual(answer,'8,1,0,0,1,2,0,0')
                     self.assertEqual(usage['completion_tokens'],11)
                     judge.request(payload)
                     self.assertEqual(len(judge.clients),1)  # keepalive reuse

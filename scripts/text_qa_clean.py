@@ -17,9 +17,10 @@ PROJECT = Path(__file__).resolve().parents[1]
 REPO = PROJECT
 import mechanical_clean as core
 from text_checks import extract_pairs
-from text_contract import FIELDS, COT, LANGUAGES, parse, issues_for
+from text_contract import FIELDS, COT, LANGUAGES, QA_TYPES, parse, issues_for
+from qa_structure import detect as detect_qa_structure
 
-PROMPT = PROJECT/'prompts/text_qa_quality_v1.txt'
+PROMPT = PROJECT/'prompts/text_qa_quality_v2.txt'
 DEFAULT = {'stage1_delivery': None, 'output': None, 'api_base': 'http://127.0.0.1:8018/v1',
            'model': 'qwen3.8-27b', 'model_revision': None, 'workers': 64, 'part_rows': 128,
            'scratch_root': None, 'scratch_limit_mb': 8192, 'timeout_seconds': 120,
@@ -200,9 +201,12 @@ def analyse(item, c, judge):
         a['issues'].extend(dict(issue, qa_index=j) for issue in attachment_issues)
         result = judge.score(q, answer, previous, attached)
         result['qa_index'] = j
+        structure = detect_qa_structure(q, answer)
+        result['qa_structure'] = structure
         a['qa_labels'].append(result)
         if result['status'] == 'ok':
-            a['issues'].extend(dict(issue, qa_index=j) for issue in issues_for(result['labels'], c['minimum_score']))
+            a['issues'].extend(dict(issue, qa_index=j)
+                               for issue in issues_for(result['labels'], c['minimum_score'], structure))
         else:
             a['issues'].append({'reason': result['status'], 'action': 'review', 'qa_index': j})
         previous.append({'question': q, 'answer': answer})
@@ -236,7 +240,8 @@ def summary_builder(c):
         parent = Path(c['stage1_delivery'])
         core.require(core.digest_file(parent/'receipt.json') == c['parent_receipt_sha256'], 'stage1 receipt changed')
         bins = {'quality_score': list(range(1,11)), 'qa_match': [0,1,2], 'refusal': [0,1,2,3],
-                'obvious_error': [0,1,2], 'cot_class': [0,1,2,'unknown'], 'language': [0,1,2,3,4]}
+                'obvious_error': [0,1,2], 'cot_class': [0,1,2,'unknown'], 'language': [0,1,2,3,4],
+                'qa_type': [0,1,2,3], 'option_count': [0,1,2,3,4,5,6,7,8,9,10]}
         totals = {f: Counter({str(k): 0 for k in bins[f]}) for f in FIELDS}
         passed = {f: Counter({str(k): 0 for k in bins[f]}) for f in FIELDS}
         states = Counter(); calls = 0; usage = Counter()
@@ -259,14 +264,18 @@ def summary_builder(c):
                        model_calls=calls, model_status_counts=dict(states), token_usage=dict(usage),
                        qa_distributions={k: dict(v) for k,v in totals.items()},
                        accepted_qa_distributions={k: dict(v) for k,v in passed.items()},
-                       label_legend={'cot': COT, 'language': LANGUAGES},
+                       label_legend={'cot': COT, 'language': LANGUAGES, 'qa_type': QA_TYPES},
                        qa_display_names={'quality_score': '质量分', 'qa_match': 'QA匹配', 'refusal': '拒答类型',
-                           'obvious_error': '文本可证明错误', 'cot_class': 'CoT类别', 'language': '语言'},
+                           'obvious_error': '文本可证明错误', 'cot_class': 'CoT类别', 'language': '语言',
+                           'qa_type': 'QA类型', 'option_count': '选项数'},
                        qa_value_names={'qa_match': {'0':'不匹配','1':'匹配','2':'未定'},
                            'refusal': {'0':'正常回答','1':'无效拒答','2':'合理拒答','3':'未定'},
                            'obvious_error': {'0':'未发现可证明错误','1':'明确错误','2':'未定'},
                            'cot_class': {'0':'已有有效CoT','1':'无CoT且不适合补充','2':'无CoT但适合补充','unknown':'未定'},
-                           'language': {'0':'未定','1':'中文','2':'英文','3':'其他','4':'混合'}},
+                           'language': {'0':'未定','1':'中文','2':'英文','3':'其他','4':'混合'},
+                           'qa_type': {'0':'开放题OE','1':'选择题MCQ','2':'判断题TF','3':'未定'},
+                           'option_count': {'0':'0/未定','1':'1（异常）','2':'2（判断）','3':'3','4':'4',
+                                            '5':'5','6':'6','7':'7','8':'8','9':'9','10':'10'}},
                        parent_stage='stage01_mechanical', parent_receipt_sha256=c['parent_receipt_sha256'],
                        minimum_score=c['minimum_score'], media_reads=0, cot_generated=0)
         upstream = json.loads((parent/'summary.json').read_bytes())
@@ -292,6 +301,7 @@ def write_attributes(stage, parts, summary):
                                  'original_source_row': a['original_source_row'], 'source_row_sha256': a['raw_sha256'],
                                  'qa_index': qa['qa_index'], 'row_status': a['status'],
                                  'label_status': qa['status'], 'labels': qa.get('labels'),
+                                 'qa_structure': qa.get('qa_structure'),
                                  'cot_candidate': a['status'] == 'accepted' and qa.get('labels', {}).get('cot_class') == 2}
                         data = core.encoded(value); out.write(data); h.update(data); total += len(data)
         out.flush()
@@ -322,7 +332,9 @@ def main():
                'model_identity_status': model_identity(c),
                'prompt_sha256': core.digest_file(PROMPT), 'producer_commit': commit}
     files = [Path(__file__), Path(__file__).with_name('text_contract.py'), Path(core.__file__), Path(frame_api.__file__)]
-    files += [Path(core.__file__).with_name('text_checks.py'), Path(core.__file__).with_name('media_checks.py')]
+    files += [Path(core.__file__).with_name('text_checks.py'),
+              Path(core.__file__).with_name('qa_structure.py'),
+              Path(core.__file__).with_name('media_checks.py')]
     identity = {str(x.relative_to(REPO)): core.digest_file(x) for x in files}
     root = Path(c['output'])/('pilot-%d' % limit if limit else 'full')
     emit('SCOPE', {'media_reads': 0, 'cot_generated': 0, 'upstream': c['stage1_delivery'],
