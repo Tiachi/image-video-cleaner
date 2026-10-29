@@ -2,6 +2,26 @@
 
 日期：2026-10-23。
 
+## 最新：文本清洗 v2（2026-10-29）
+
+实现：分支`codex/text-cleaning-v2`，代码提交`09fe80f`。Stage01新增datatrove SFT配方的8-gram/最少128 token/重复比0.6长文本复读、脚本语言代理、确定性OE/MCQ/判断题与选项检测、高精度boilerplate（lorem ipsum/javascript/模板AI拒答）；跨样例仍为精确去重，上游datatrove MinHash近似去重未启用（性能待实测）。Stage02从6个整数扩展为8个，新增`qa_type`（0 OE/1 MCQ/2 TF/3未定）与`option_count`（OE/未定0、TF2、MCQ2~10），默认Prompt为`text_qa_quality_v2.txt`，并用同一确定性检测做交叉校验。Stage03属性继承8字段与`qa_structure`。
+
+本地合成验证：完整单测**149项通过**。新增覆盖8整数解析边界、MCQ/TF/OE、选项数一致性、答案字母越界、未标注尾选项、正文/数学图标记误判、yes/no边界、datatrove复读、语言代理、Stage03继承，以及旧统一配置缺`text_v2`时补默认。
+
+真实小样本pilot（六来源各20行，共120行；Qwen3.8-27B，8018；图片阈值1000仅用于本次pilot）：
+
+| 阶段 | 用时 | 结果 |
+|---|---:|---|
+| Stage01 | 3.3s | accepted 118 / review 2 / rejected 0；qa_type OE106/MCQ12/TF2；语言代理zh_or_mixed 37/latin_script 83 |
+| Stage02 | 15.0s | 118次模型调用，**118/118返回8整数**；accepted 113 / review 4 / rejected 1；原因qa_type_mismatch3、obvious_error_uncertain1、qa_match_uncertain1、text_provable_error1 |
+| Stage03 | 15.6s | 输入113；accepted 88 / review 24 / rejected 1；13次media model_error来自既有视觉Prompt/v1，不是本次文本改动 |
+
+Stage02标签分布：质量分9=100、7=16、4=1、3=1；QA匹配1=117、2=1；CoT 0=85/1=16/2=17；语言zh=34/en=82/mixed=2；模型qa_type OE=104/MCQ=12/TF=2；选项数2=3、3=2、4=8、8=1。
+
+pilot发现并修复的确定性解析问题：DeepVision尾选项缺“D.”标记曾被误reject，现改为review；正文中的A/E/G和数学图中的①②曾被误判MCQ，现要求MCQ引导词/至少3个圈号；2选项MCQ（even/odd）曾被判非法，现允许2~10；“Can you tell/Are there any”曾被误判TF，现收窄yes/no规则。修复后Stage01无reject，Stage02无解析失败。
+
+边界：pilot是每来源前20行，不是随机准确率样本；模型标签不是人工金标；Stage03的13次media model_error仍需单独处理；未做全量媒体解码、跨源近似去重和正式训练格式认证。全量1.4M级别的吞吐与质量仍需按真实配置重测。
+
 ## 最新：独立帧缓存客户端外挂
 
 实现：`scripts/frame_cache_client.py`是Python3.10+标准库单文件，inspect/check/request无需安装vLLM或导入本管道；Stage03共用相同PNG请求封装和有界HTTP收发。新增显式统一入口api-check、实际发送processor预算（修复此前仅声明未发送）、人工server_default模式、缓存篡改停止、传输/参数侧车证据，cache版本/原始PNG/采样/评分不变。[完整说明与命令](portable_frame_client.md)。
